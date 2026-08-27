@@ -126,21 +126,20 @@ class EnvConfig {
   static Future<Map<String, String>> _loadEnvFile() async {
     String? content;
 
-    // Try loading via rootBundle (Flutter Asset)
+    // Try loading via direct File system (for local runs & tests)
     try {
-      content = await rootBundle.loadString('.env');
-    } catch (_) {
-      try {
-        content = await rootBundle.loadString('assets/.env');
-      } catch (_) {}
-    }
+      final file = File('.env');
+      if (await file.exists()) {
+        content = await file.readAsString();
+      }
+    } catch (_) {}
 
-    // Try loading via direct File system (for desktop / tests)
+    // Fallback to .env.example if .env is not present
     if (content == null || content.isEmpty) {
       try {
-        final file = File('.env');
-        if (await file.exists()) {
-          content = await file.readAsString();
+        final exampleFile = File('.env.example');
+        if (await exampleFile.exists()) {
+          content = await exampleFile.readAsString();
         }
       } catch (_) {}
     }
