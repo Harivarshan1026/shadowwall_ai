@@ -89,7 +89,7 @@ class SafeBrowsingService {
 
         if (matches != null && matches.isNotEmpty) {
           final first = matches.first as Map<String, dynamic>;
-          AppLogger.warn('Google Safe Browsing MATCH detected: ${first['threatType']}');
+          AppLogger.warning('Google Safe Browsing MATCH detected: ${first['threatType']}');
           return SafeBrowsingResult(
             isThreat: true,
             threatType: first['threatType'] as String?,

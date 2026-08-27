@@ -36,6 +36,11 @@ class AppLogger {
     _logger.w(message);
   }
 
+  /// Warning level log alias.
+  static void warn(String message) {
+    _logger.w(message);
+  }
+
   /// Error level log with optional error and stack trace.
   static void error(String message, [dynamic error, StackTrace? stackTrace]) {
     _logger.e(message, error: error, stackTrace: stackTrace);
