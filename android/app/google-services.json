@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "883269776134",
+    "project_id": "shadowwall-ai-hari",
+    "storage_bucket": "shadowwall-ai-hari.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:883269776134:android:2c5e66902f2a9e9b12a487",
+        "android_client_info": {
+          "package_name": "com.shadowwall.ai"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAvL9QKLaDRVCEcJz7g-cH3o8BCDYtYbEg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:883269776134:android:2c5e66902f2a9e9b12a487",
+        "android_client_info": {
+          "package_name": "com.example.shadowwall_ai"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAvL9QKLaDRVCEcJz7g-cH3o8BCDYtYbEg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
