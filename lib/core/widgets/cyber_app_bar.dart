@@ -68,7 +68,7 @@ class CyberAppBar extends StatelessWidget implements PreferredSizeWidget {
   }
 }
 
-/// Shield logo widget used in the AppBar.
+/// Shield logo widget using official ShadowWall app branding.
 class ShieldLogo extends StatelessWidget {
   final double size;
 
@@ -80,20 +80,25 @@ class ShieldLogo extends StatelessWidget {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        gradient: AppColors.primaryGradient,
-        borderRadius: BorderRadius.circular(size * 0.3),
+        borderRadius: BorderRadius.circular(size * 0.25),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primaryCyan.withValues(alpha: 0.4),
+            color: AppColors.primaryCyan.withValues(alpha: 0.35),
             blurRadius: size * 0.3,
             offset: Offset(0, size * 0.1),
           ),
         ],
       ),
-      child: Icon(
-        Icons.shield_rounded,
-        color: Colors.white,
-        size: size * 0.55,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(size * 0.25),
+        child: Image.asset(
+          'assets/images/app_logo.png',
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => Container(
+            decoration: const BoxDecoration(gradient: AppColors.primaryGradient),
+            child: Icon(Icons.shield_rounded, color: Colors.white, size: size * 0.55),
+          ),
+        ),
       ),
     );
   }

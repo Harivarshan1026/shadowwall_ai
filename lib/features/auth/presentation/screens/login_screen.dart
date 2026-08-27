@@ -164,25 +164,30 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   Widget _buildHeader() {
     return Column(
       children: [
-        // Shield icon with glow
+        // Official App Logo with Cyber Glow
         Container(
-          width: 80,
-          height: 80,
+          width: 90,
+          height: 90,
           decoration: BoxDecoration(
-            gradient: AppColors.primaryGradient,
             borderRadius: BorderRadius.circular(24),
             boxShadow: [
               BoxShadow(
-                color: AppColors.primaryCyan.withValues(alpha: 0.4),
+                color: AppColors.primaryCyan.withValues(alpha: 0.45),
                 blurRadius: 24,
                 offset: const Offset(0, 8),
               ),
             ],
           ),
-          child: const Icon(
-            Icons.shield_rounded,
-            color: Colors.white,
-            size: 40,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(24),
+            child: Image.asset(
+              'assets/images/app_logo.png',
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(
+                decoration: const BoxDecoration(gradient: AppColors.primaryGradient),
+                child: const Icon(Icons.shield_rounded, color: Colors.white, size: 44),
+              ),
+            ),
           ),
         ),
         const SizedBox(height: 20),
