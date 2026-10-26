@@ -158,7 +158,6 @@ class _PermissionDoctorScreenState extends State<PermissionDoctorScreen> {
               final app = _appResults[index];
               final analysis = app['analysis'] as Map<String, dynamic>;
               final score = (analysis['score'] as num).toDouble();
-              final category = analysis['category'] as String;
               final reasons = (analysis['reasons'] as List).cast<String>();
               final dangerousCount = analysis['dangerousCount'] as int;
 

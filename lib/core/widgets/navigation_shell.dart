@@ -17,10 +17,9 @@ class NavigationShell extends StatelessWidget {
   int _currentIndex(BuildContext context) {
     final location = GoRouterState.of(context).uri.path;
     if (location == RoutePaths.dashboard) return 0;
-    if (location == RoutePaths.scanner) return 1;
-    if (location == RoutePaths.community) return 2;
-    if (location == RoutePaths.learn) return 3;
-    if (location == RoutePaths.profile) return 4;
+    if (location == RoutePaths.community) return 1;
+    if (location == RoutePaths.learn) return 2;
+    if (location == RoutePaths.profile) return 3;
     return 0;
   }
 
@@ -29,12 +28,10 @@ class NavigationShell extends StatelessWidget {
       case 0:
         context.go(RoutePaths.dashboard);
       case 1:
-        context.go(RoutePaths.scanner);
-      case 2:
         context.go(RoutePaths.community);
-      case 3:
+      case 2:
         context.go(RoutePaths.learn);
-      case 4:
+      case 3:
         context.go(RoutePaths.profile);
     }
   }
@@ -69,14 +66,9 @@ class NavigationShell extends StatelessWidget {
               label: 'Home',
             ),
             NavigationDestination(
-              icon: Icon(Icons.radar_outlined),
-              selectedIcon: Icon(Icons.radar_rounded),
-              label: 'Scan',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.people_outline_rounded),
-              selectedIcon: Icon(Icons.people_rounded),
-              label: 'Community',
+              icon: Icon(Icons.newspaper_outlined),
+              selectedIcon: Icon(Icons.newspaper_rounded),
+              label: 'Threat News',
             ),
             NavigationDestination(
               icon: Icon(Icons.school_outlined),

@@ -10,9 +10,9 @@ void main() {
       expect(identical(instance1, instance2), isTrue);
     });
 
-    test('Query returns false gracefully on empty URL', () async {
-      final result = await SafeBrowsingService.instance.checkUrlThreat('');
-      expect(result['isThreat'], isFalse);
+    test('Query returns null gracefully on empty URL without API key', () async {
+      final result = await SafeBrowsingService.instance.checkUrl('');
+      expect(result, isNull);
     });
   });
 
@@ -23,14 +23,14 @@ void main() {
       expect(identical(instance1, instance2), isTrue);
     });
 
-    test('Query returns false gracefully on empty URL', () async {
-      final result = await VirusTotalService.instance.checkUrlReputation('');
-      expect(result['isMalicious'], isFalse);
+    test('Query returns null gracefully on empty URL without API key', () async {
+      final result = await VirusTotalService.instance.checkUrl('');
+      expect(result, isNull);
     });
 
-    test('Hash query returns false gracefully on empty hash', () async {
+    test('Hash query returns null gracefully on empty hash without API key', () async {
       final result = await VirusTotalService.instance.checkFileHash('');
-      expect(result['isMalicious'], isFalse);
+      expect(result, isNull);
     });
   });
 }

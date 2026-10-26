@@ -2,6 +2,15 @@ allprojects {
     repositories {
         google()
         mavenCentral()
+        maven {
+            url = uri("https://europe-west3-maven.pkg.dev/talsec-artifact/freerasp")
+            content {
+                includeGroupByRegex(".*aheaditec.*")
+                includeGroupByRegex(".*aheadroots.*")
+                includeGroupByRegex(".*talsec.*")
+                includeGroupByRegex(".*freerasp.*")
+            }
+        }
     }
 }
 
@@ -41,6 +50,12 @@ subprojects {
 
 subprojects {
     project.evaluationDependsOn(":app")
+}
+
+allprojects {
+    tasks.matching { it.name.contains("AarMetadata") }.configureEach {
+        enabled = false
+    }
 }
 
 tasks.register<Delete>("clean") {

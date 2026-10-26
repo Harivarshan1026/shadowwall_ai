@@ -40,23 +40,35 @@ class GeminiAiService {
   static String get model => EnvConfig.geminiModel;
 
   static const List<String> _fallbackModels = [
-    'gemini-3.6-flash',
-    'gemini-3.7-flash',
+    'gemini-2.0-flash',
+    'gemini-1.5-flash',
+    'gemini-flash-lite-latest',
     'gemini-flash-latest',
-    'gemini-2.5-pro',
+    'gemini-2.5-flash',
+    'gemini-3.5-flash-lite',
+    'gemini-3.7-flash',
   ];
 
-  static const Duration _timeout = Duration(seconds: 25);
+  static const Duration _timeout = Duration(seconds: 20);
 
   static const String _defaultSystemInstruction = '''
-You are ShadowWall AI, an elite cybersecurity and mobile defense AI assistant created to protect users from cyber threats, hacking, scams, malware, phishing, and privacy violations.
-- Provide accurate, comprehensive, and technically grounded answers to user questions.
-- When explaining attack mechanics (e.g. Wi-Fi WPA2/WPA3 handshake capture, phishing vectors, social engineering, ransomware, APK sideloading risks), always emphasize the underlying defensive principles and actionable mitigation steps.
-- Format responses clearly with markdown formatting, bold keywords, and clean bullet points.
-- Maintain a professional, reassuring, and security-centric tone.
+You are ShadowWall AI, a smart, natural, and friendly cybersecurity assistant 🛡️.
+
+CONVERSATION & TONE RULES:
+1. Context-Aware & Proportional:
+   - If the user sends a greeting (e.g. "hi", "hello", "hey", "good morning"), respond naturally and warmly with a brief 1-2 sentence greeting and ask what cybersecurity question or topic they'd like help with. NEVER dump unsolicited safety tips, menus, or long lectures on greetings.
+   - If the user asks a question, answer that specific question directly, concisely, and accurately in natural language.
+2. Natural, Human Tone:
+   - Talk like a knowledgeable security mentor having a friendly 1-on-1 chat, not a rigid robot or automated template.
+3. Clean Formatting (NO RAW MARKDOWN SYMBOLS):
+   - Never use '###', '##', or '#' tags.
+   - Never use divider lines like '---' or '***'.
+   - Do NOT wrap words in '**' double asterisks or '*' single asterisks. Write in plain, elegant, natural text.
+   - Use clean bullets (•) or numbered steps (1., 2.) only when necessary for clear explanations.
+4. Keep it engaging with tasteful, relevant emojis (🛡️, 🔒, 💡, ⚠️, 📱).
 ''';
 
-  /// Helper to send request with automatic model fallback if a model is deprecated / 404
+  /// Helper to send request with automatic model fallback if a model is deprecated, 404, or 429 rate-limited
   Future<http.Response?> _postWithFallback(String key, Map<String, dynamic> payload) async {
     final candidateModels = <String>[
       model,
@@ -85,8 +97,8 @@ You are ShadowWall AI, an elite cybersecurity and mobile defense AI assistant cr
 
         lastResponse = response;
 
-        // If not a 404 (model not found / deprecated), do not try next model
-        if (response.statusCode != 404) {
+        // If not a 404 (model not found), 429 (quota limit), or 503 (high demand), break
+        if (response.statusCode != 404 && response.statusCode != 429 && response.statusCode != 503) {
           return response;
         }
       } catch (e) {
@@ -151,31 +163,61 @@ You are ShadowWall AI, an elite cybersecurity and mobile defense AI assistant cr
     }
 
     try {
-      // Build message contents from recent history (last 10 messages for token efficiency)
+      // Build message contents ensuring strictly alternating user/model roles and starting with 'user'
       final contents = <Map<String, dynamic>>[];
 
-      final recentHistory = conversationHistory.length > 10
-          ? conversationHistory.sublist(conversationHistory.length - 10)
-          : conversationHistory;
-
-      for (final msg in recentHistory) {
+      // Filter out empty messages and only take the preceding history
+      final historyToProcess = <Map<String, dynamic>>[];
+      for (int i = 0; i < conversationHistory.length; i++) {
+        final msg = conversationHistory[i];
         final text = (msg['text'] as String?)?.trim() ?? '';
-        final isUser = msg['isUser'] as bool? ?? false;
         if (text.isEmpty) continue;
 
-        contents.add({
-          'role': isUser ? 'user' : 'model',
-          'parts': [
-            {'text': text}
-          ],
-        });
+        // Skip if this is the last element and matches the current prompt (already added in screen state)
+        if (i == conversationHistory.length - 1 && msg['isUser'] == true && text == userPrompt.trim()) {
+          continue;
+        }
+        historyToProcess.add(msg);
       }
 
-      // Add the current user prompt
+      // Limit history to the last 8 turns for performance & context
+      final recentHistory = historyToProcess.length > 8
+          ? historyToProcess.sublist(historyToProcess.length - 8)
+          : historyToProcess;
+
+      // Find the first user message in recent history so contents starts with 'user'
+      int firstUserIndex = recentHistory.indexWhere((m) => m['isUser'] == true);
+      if (firstUserIndex != -1) {
+        String? lastRole;
+        for (int i = firstUserIndex; i < recentHistory.length; i++) {
+          final msg = recentHistory[i];
+          final text = (msg['text'] as String?)?.trim() ?? '';
+          final role = (msg['isUser'] as bool? ?? false) ? 'user' : 'model';
+
+          if (role == lastRole || text.isEmpty) {
+            continue; // Ensure strictly alternating roles
+          }
+
+          contents.add({
+            'role': role,
+            'parts': [
+              {'text': text}
+            ],
+          });
+          lastRole = role;
+        }
+      }
+
+      // If the last turn in contents is 'user', remove it to avoid consecutive 'user' turns
+      if (contents.isNotEmpty && contents.last['role'] == 'user') {
+        contents.removeLast();
+      }
+
+      // Append current user prompt
       contents.add({
         'role': 'user',
         'parts': [
-          {'text': userPrompt}
+          {'text': userPrompt.trim()}
         ],
       });
 
@@ -208,7 +250,8 @@ You are ShadowWall AI, an elite cybersecurity and mobile defense AI assistant cr
           if (parts != null && parts.isNotEmpty) {
             final text = parts.first['text'] as String?;
             if (text != null && text.trim().isNotEmpty) {
-              return GeminiResult.success(text.trim());
+              final cleanText = sanitizeAiOutput(text.trim());
+              return GeminiResult.success(cleanText);
             }
           }
         }
@@ -241,6 +284,26 @@ You are ShadowWall AI, an elite cybersecurity and mobile defense AI assistant cr
       userPrompt: userPrompt,
     );
     return result.text;
+  }
+
+  /// Sanitizes AI output by removing raw markdown symbols (###, ---, **, *)
+  static String sanitizeAiOutput(String text) {
+    if (text.isEmpty) return text;
+    String cleaned = text;
+    // Remove markdown headers: ### Title -> Title
+    cleaned = cleaned.replaceAll(RegExp(r'#{1,6}\s*'), '');
+    // Remove horizontal rules: ---, ***, ___
+    cleaned = cleaned.replaceAll(RegExp(r'^\s*[-*_]{3,}\s*$', multiLine: true), '');
+    // Remove bold/italic markers: **bold** -> bold, *italic* -> italic
+    cleaned = cleaned.replaceAll(RegExp(r'\*\*([^*]+)\*\*'), r'$1');
+    cleaned = cleaned.replaceAll(RegExp(r'\*([^*]+)\*'), r'$1');
+    // Convert asterisk bullets to clean bullet dots
+    cleaned = cleaned.replaceAll(RegExp(r'^\s*\*\s+', multiLine: true), '• ');
+    // Remove inline backticks
+    cleaned = cleaned.replaceAll(RegExp(r'`([^`]+)`'), r'$1');
+    // Normalize excessive blank lines
+    cleaned = cleaned.replaceAll(RegExp(r'\n{3,}'), '\n\n');
+    return cleaned.trim();
   }
 
   /// AI URL Scanning & Deep Risk Analysis
@@ -348,56 +411,95 @@ Return JSON format ONLY with these exact keys:
     }
   }
 
-  /// AI Image / Social Media Post / News Fact-Checker & Scam Verifier
-  Future<Map<String, dynamic>?> factCheckImageTextWithAi(String extractedText) async {
+  /// AI Image / Social Media Post / News Fact-Checker & Scam Verifier (Multimodal + OCR Text)
+  Future<Map<String, dynamic>?> factCheckScreenshotWithAi({
+    String? extractedText,
+    List<int>? imageBytes,
+    String mimeType = 'image/jpeg',
+  }) async {
     final key = apiKey;
     if (key.isEmpty) return null;
 
     try {
+      final textContent = (extractedText != null && extractedText.trim().isNotEmpty)
+          ? 'Extracted OCR Text:\n"""$extractedText"""\n'
+          : '';
+
       final prompt = '''
 You are an expert Cyber Intelligence and Fact-Checking Analyst for ShadowWall AI.
-Analyze the following text extracted from a Screenshot, Social Media Post, News Article, or Message:
-Text: "$extractedText"
-
+Analyze this Screenshot / Image / Post for factual veracity, digital manipulation, and scam patterns.
+$textContent
 TASK:
-1. Determine if the information/news in the screenshot is REAL NEWS, FAKE NEWS / FABRICATED HOAX, MISLEADING / OUT OF CONTEXT, or a FINANCIAL / PHISHING SCAM.
-2. Provide a detailed, evidence-based fact-check analysis explaining WHY it is real or fake.
-3. Highlight specific indicators, digital manipulation clues, or fact-check references (e.g., official government statements, known hoaxes, viral rumors).
+1. Determine with strict accuracy whether the screenshot content is REAL or FAKE.
+   - REAL: Verified authentic news from credible publishers, legitimate government orders/circulars, genuine transaction receipts, authentic personal messages without deceit or fraud.
+   - FAKE: Fabricated hoaxes, altered/photoshopped headlines or tweets, manipulated screenshots, fake viral rumors/forwards, forged banking/UPI payment receipts, phishing contests, lottery scams, or impersonation fraud.
+2. Binary Verdict: Is it REAL or FAKE? Set "isReal": true (if real) or "isReal": false (if fake).
+3. Score:
+   - If REAL: Set "score" to an Authenticity Confidence Score between 80 and 99 (e.g., 95).
+   - If FAKE: Set "score" to a Fake / Threat Risk Score between 75 and 99 (e.g., 90).
+4. Provide a crisp verdict headline and a forensic, evidence-based fact-check summary.
+5. Highlight specific detected visual/textual indicators.
+6. Provide trusted portals or sources to cross-verify.
+7. Provide recommended safety actions.
 
 Respond in strictly valid JSON format with NO markdown wrapping or preamble, using this exact schema:
 {
-  "isRealNews": false,
-  "veracityLabel": "Fake News / Fabricated Hoax",
-  "veracityScore": 85,
-  "credibilityScore": 15,
-  "factCheckHeadline": "Crisp verdict headline",
-  "factCheckSummary": "Detailed multi-paragraph explanation of why this news is real or fake, what the actual truth is, and any official statements or known precedents.",
+  "isReal": true,
+  "verdict": "REAL",
+  "veracityLabel": "REAL",
+  "score": 95,
+  "factCheckHeadline": "Authentic Public Announcement",
+  "factCheckSummary": "Detailed multi-paragraph explanation of why this content is real or fake, citing verified sources and known context.",
   "detectedIndicators": [
-    "Specific evidence/reason 1 (e.g. fabricated quote not found on official channels)",
-    "Specific evidence/reason 2 (e.g. altered dates or sensational clickbait tone)",
-    "Specific evidence/reason 3 (e.g. typical phishing lure requesting sensitive actions)"
+    "Indicator 1 (e.g., Verified official publication source)",
+    "Indicator 2 (e.g., Consistent typography and authentic metadata)"
   ],
   "trustedSourcesToVerify": [
     "Official Press Information Bureau (PIB)",
     "Reputable news outlets (Reuters, AP, BBC, The Hindu)"
   ],
   "recommendedActions": [
-    "Do not forward or share this image on social media or messaging apps.",
-    "Verify through official government / regulatory portals."
+    "Safe to read and reference.",
+    "Verify with official channels when in doubt."
   ]
 }
 ''';
+
+      final parts = <Map<String, dynamic>>[];
+
+      // Multimodal vision inline data if image bytes are provided
+      if (imageBytes != null && imageBytes.isNotEmpty) {
+        String effectiveMime = mimeType;
+        if (imageBytes.length >= 4) {
+          if (imageBytes[0] == 0x89 && imageBytes[1] == 0x50 && imageBytes[2] == 0x4E && imageBytes[3] == 0x47) {
+            effectiveMime = 'image/png';
+          } else if (imageBytes[0] == 0xFF && imageBytes[1] == 0xD8 && imageBytes[2] == 0xFF) {
+            effectiveMime = 'image/jpeg';
+          } else if (imageBytes.length >= 12 &&
+              imageBytes[0] == 0x52 && imageBytes[1] == 0x49 && imageBytes[2] == 0x46 && imageBytes[3] == 0x46 &&
+              imageBytes[8] == 0x57 && imageBytes[9] == 0x45 && imageBytes[10] == 0x42 && imageBytes[11] == 0x50) {
+            effectiveMime = 'image/webp';
+          }
+        }
+
+        parts.add({
+          'inline_data': {
+            'mime_type': effectiveMime,
+            'data': base64Encode(imageBytes),
+          }
+        });
+      }
+
+      parts.add({'text': prompt});
 
       final payload = {
         'contents': [
           {
             'role': 'user',
-            'parts': [
-              {'text': prompt}
-            ]
+            'parts': parts,
           }
         ],
-        'generationConfig': {'temperature': 0.2, 'maxOutputTokens': 1200}
+        'generationConfig': {'temperature': 0.1, 'maxOutputTokens': 1200}
       };
 
       final response = await _postWithFallback(key, payload);
@@ -407,15 +509,37 @@ Respond in strictly valid JSON format with NO markdown wrapping or preamble, usi
         final candidates = data['candidates'] as List?;
         if (candidates != null && candidates.isNotEmpty) {
           final text = candidates.first['content']['parts'].first['text'] as String;
-          return _cleanAndParseJson(text);
+          final parsed = _cleanAndParseJson(text);
+          if (parsed != null) {
+            // Standardize output
+            final bool isReal = parsed['isReal'] == true ||
+                parsed['verdict']?.toString().trim().toUpperCase() == 'REAL' ||
+                parsed['isRealNews'] == true;
+            final double rawScore = (parsed['score'] as num?)?.toDouble() ??
+                (parsed['credibilityScore'] as num?)?.toDouble() ??
+                (parsed['veracityScore'] as num?)?.toDouble() ??
+                (isReal ? 95.0 : 88.0);
+
+            parsed['isReal'] = isReal;
+            parsed['verdict'] = isReal ? 'REAL' : 'FAKE';
+            parsed['veracityLabel'] = isReal ? 'REAL' : 'FAKE';
+            parsed['score'] = rawScore.clamp(60.0, 99.0);
+            return parsed;
+          }
         }
       }
       return null;
     } catch (e) {
-      AppLogger.error('Error in factCheckImageTextWithAi: $e');
+      AppLogger.error('Error in factCheckScreenshotWithAi: $e');
       return null;
     }
   }
+
+  /// Backward-compatible single string wrapper
+  Future<Map<String, dynamic>?> factCheckImageTextWithAi(String extractedText) {
+    return factCheckScreenshotWithAi(extractedText: extractedText);
+  }
+
 
   /// AI Device Security & Hardware Posture Review
   Future<Map<String, dynamic>?> analyzeDeviceWithAi(Map<String, dynamic> hardwareStatus) async {

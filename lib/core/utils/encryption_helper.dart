@@ -5,6 +5,7 @@
 library;
 
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:crypto/crypto.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -57,7 +58,7 @@ class EncryptionHelper {
     if (input.isEmpty) return '';
     final rawBytes = utf8.encode(input);
     final keyBytes = utf8.encode('ShadowWallMasterKey2026!#Secure');
-    final iv = DateTime.now().microsecondsSinceEpoch % 256;
+    final iv = math.Random.secure().nextInt(256);
     
     final encrypted = List<int>.generate(
       rawBytes.length + 1,

@@ -1,4 +1,8 @@
+import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../../ai_engine/services/gemini_ai_service.dart';
 
 class ScamReportEntity {
   final String id;
@@ -10,6 +14,9 @@ class ScamReportEntity {
   final int upvotes;
   final int comments;
   final bool isVerified;
+  final String? scammerContact;
+  final String? maliciousUrl;
+  final String? aiAnalysis;
 
   const ScamReportEntity({
     required this.id,
@@ -18,15 +25,53 @@ class ScamReportEntity {
     required this.type,
     required this.user,
     required this.time,
-    this.upvotes = 0,
+    this.upvotes = 1,
     this.comments = 0,
-    this.isVerified = false,
+    this.isVerified = true,
+    this.scammerContact,
+    this.maliciousUrl,
+    this.aiAnalysis,
   });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'title': title,
+      'description': description,
+      'type': type,
+      'user': user,
+      'time': time.toIso8601String(),
+      'upvotes': upvotes,
+      'comments': comments,
+      'isVerified': isVerified,
+      'scammerContact': scammerContact,
+      'maliciousUrl': maliciousUrl,
+      'aiAnalysis': aiAnalysis,
+    };
+  }
+
+  factory ScamReportEntity.fromMap(Map<String, dynamic> map) {
+    return ScamReportEntity(
+      id: map['id'] ?? '',
+      title: map['title'] ?? '',
+      description: map['description'] ?? '',
+      type: map['type'] ?? 'Phishing',
+      user: map['user'] ?? 'Verified User',
+      time: DateTime.tryParse(map['time'] ?? '') ?? DateTime.now(),
+      upvotes: map['upvotes'] ?? 0,
+      comments: map['comments'] ?? 0,
+      isVerified: map['isVerified'] ?? true,
+      scammerContact: map['scammerContact'],
+      maliciousUrl: map['maliciousUrl'],
+      aiAnalysis: map['aiAnalysis'],
+    );
+  }
 
   ScamReportEntity copyWith({
     int? upvotes,
     int? comments,
     bool? isVerified,
+    String? aiAnalysis,
   }) {
     return ScamReportEntity(
       id: id,
@@ -38,6 +83,9 @@ class ScamReportEntity {
       upvotes: upvotes ?? this.upvotes,
       comments: comments ?? this.comments,
       isVerified: isVerified ?? this.isVerified,
+      scammerContact: scammerContact,
+      maliciousUrl: maliciousUrl,
+      aiAnalysis: aiAnalysis ?? this.aiAnalysis,
     );
   }
 }
@@ -46,26 +94,29 @@ class ScamCommunityState {
   final List<ScamReportEntity> reports;
   final String searchQuery;
   final String selectedCategory; // 'Trending', 'Phishing', etc.
+  final bool isLoading;
 
   const ScamCommunityState({
     required this.reports,
     this.searchQuery = '',
     this.selectedCategory = 'Trending',
+    this.isLoading = false,
   });
 
   ScamCommunityState copyWith({
     List<ScamReportEntity>? reports,
     String? searchQuery,
     String? selectedCategory,
+    bool? isLoading,
   }) {
     return ScamCommunityState(
       reports: reports ?? this.reports,
       searchQuery: searchQuery ?? this.searchQuery,
       selectedCategory: selectedCategory ?? this.selectedCategory,
+      isLoading: isLoading ?? this.isLoading,
     );
   }
 
-  // Derived filtered list
   List<ScamReportEntity> get filteredReports {
     var filtered = reports;
 
@@ -73,17 +124,18 @@ class ScamCommunityState {
     if (selectedCategory != 'Trending') {
       filtered = filtered.where((r) => r.type == selectedCategory).toList();
     } else {
-      // Trending logic: sort by upvotes
+      // Trending: sort by upvotes
       filtered = List.from(filtered)..sort((a, b) => b.upvotes.compareTo(a.upvotes));
     }
 
     // Filter by Search Query
     if (searchQuery.isNotEmpty) {
       final query = searchQuery.toLowerCase();
-      filtered = filtered.where((r) => 
-        r.title.toLowerCase().contains(query) || 
-        r.description.toLowerCase().contains(query)
-      ).toList();
+      filtered = filtered.where((r) =>
+          r.title.toLowerCase().contains(query) ||
+          r.description.toLowerCase().contains(query) ||
+          (r.maliciousUrl?.toLowerCase().contains(query) ?? false) ||
+          (r.scammerContact?.toLowerCase().contains(query) ?? false)).toList();
     }
 
     return filtered;
@@ -91,61 +143,90 @@ class ScamCommunityState {
 }
 
 class ScamCommunityNotifier extends StateNotifier<ScamCommunityState> {
-  ScamCommunityNotifier() : super(_initialState());
-
-  static ScamCommunityState _initialState() {
-    return ScamCommunityState(
-      reports: [
-        ScamReportEntity(
-          id: '1',
-          title: 'Fake Banking SMS with link',
-          description: 'Received an SMS claiming my bank account is locked. It has a suspicious bit.ly link.',
-          type: 'Phishing',
-          user: 'CyberHero_99',
-          time: DateTime.now().subtract(const Duration(minutes: 45)),
-          upvotes: 124,
-          comments: 12,
-          isVerified: true,
-        ),
-        ScamReportEntity(
-          id: '2',
-          title: 'WhatsApp Crypto Investment Scam',
-          description: 'A stranger messaged me offering 500% returns on crypto in 24 hours. SCAM.',
-          type: 'Crypto',
-          user: 'AnonShield',
-          time: DateTime.now().subtract(const Duration(hours: 2)),
-          upvotes: 89,
-          comments: 5,
-          isVerified: false,
-        ),
-        ScamReportEntity(
-          id: '3',
-          title: 'Electricity Bill Update Scam Call',
-          description: 'Caller threatened to cut power in 30 minutes if I didn\'t pay via Zelle.',
-          type: 'Calls/SMS',
-          user: 'SafeNet21',
-          time: DateTime.now().subtract(const Duration(hours: 5)),
-          upvotes: 210,
-          comments: 34,
-          isVerified: true,
-        ),
-        ScamReportEntity(
-          id: '4',
-          title: 'Fake Job Offer on LinkedIn',
-          description: 'Got an offer for a job I never applied to, asking for a \$50 "equipment fee" upfront.',
-          type: 'Social Media',
-          user: 'JobSeeker01',
-          time: DateTime.now().subtract(const Duration(days: 1)),
-          upvotes: 56,
-          comments: 8,
-          isVerified: false,
-        ),
-      ],
-    );
+  ScamCommunityNotifier() : super(const ScamCommunityState(reports: [], isLoading: true)) {
+    loadUserReports();
   }
 
-  void addReport(ScamReportEntity report) {
-    state = state.copyWith(reports: [report, ...state.reports]);
+  static const String _storageKey = 'user_community_reports_v2';
+
+  /// Load purely user-submitted reports from local persistent storage & Firestore
+  Future<void> loadUserReports() async {
+    state = state.copyWith(isLoading: true);
+    final List<ScamReportEntity> loadedReports = [];
+
+    // 1. Try local storage first for offline speed
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final jsonStr = prefs.getString(_storageKey);
+      if (jsonStr != null && jsonStr.isNotEmpty) {
+        final List decoded = json.decode(jsonStr);
+        loadedReports.addAll(decoded.map((e) => ScamReportEntity.fromMap(Map<String, dynamic>.from(e))));
+      }
+    } catch (_) {}
+
+    // 2. Try Firestore sync
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('community_reports')
+          .orderBy('time', descending: true)
+          .limit(50)
+          .get()
+          .timeout(const Duration(seconds: 4));
+
+      if (snapshot.docs.isNotEmpty) {
+        final remoteReports = snapshot.docs.map((doc) {
+          final data = doc.data();
+          data['id'] = doc.id;
+          return ScamReportEntity.fromMap(data);
+        }).toList();
+
+        // Merge without duplicates
+        for (final r in remoteReports) {
+          if (!loadedReports.any((item) => item.id == r.id)) {
+            loadedReports.add(r);
+          }
+        }
+      }
+    } catch (_) {}
+
+    state = state.copyWith(reports: loadedReports, isLoading: false);
+  }
+
+  Future<void> addReport(ScamReportEntity report) async {
+    // Generate AI Verification & Threat Analysis
+    String? aiVerification;
+    try {
+      final res = await GeminiAiService.instance.queryGeminiChat(
+        conversationHistory: [],
+        userPrompt: '''Perform a concise cybersecurity threat verification for this user scam report:
+Title: ${report.title}
+Category: ${report.type}
+Description: ${report.description}
+Indicators: ${report.maliciousUrl ?? ""} ${report.scammerContact ?? ""}
+
+Verify the attack pattern, list warning flags, and provide 2 bullet points of immediate victim mitigation advice.''',
+      );
+      aiVerification = res.text;
+    } catch (_) {}
+
+    final finalizedReport = report.copyWith(aiAnalysis: aiVerification);
+    final updatedList = [finalizedReport, ...state.reports];
+    state = state.copyWith(reports: updatedList);
+
+    // Save locally
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final encoded = json.encode(updatedList.map((r) => r.toMap()).toList());
+      await prefs.setString(_storageKey, encoded);
+    } catch (_) {}
+
+    // Push to Firestore
+    try {
+      await FirebaseFirestore.instance
+          .collection('community_reports')
+          .doc(finalizedReport.id)
+          .set(finalizedReport.toMap());
+    } catch (_) {}
   }
 
   void setSearchQuery(String query) {
@@ -156,12 +237,19 @@ class ScamCommunityNotifier extends StateNotifier<ScamCommunityState> {
     state = state.copyWith(selectedCategory: category);
   }
 
-  void upvoteReport(String id) {
+  Future<void> upvoteReport(String id) async {
     final updated = state.reports.map((r) {
       if (r.id == id) return r.copyWith(upvotes: r.upvotes + 1);
       return r;
     }).toList();
     state = state.copyWith(reports: updated);
+
+    // Save
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final encoded = json.encode(updated.map((r) => r.toMap()).toList());
+      await prefs.setString(_storageKey, encoded);
+    } catch (_) {}
   }
 }
 

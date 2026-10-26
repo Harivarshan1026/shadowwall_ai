@@ -10,6 +10,7 @@
 # FreeRASP / Talsec
 -keep class com.aheadroots.freerasp.** { *; }
 -keep class com.talsec.freerasp.** { *; }
+-keep class com.aheaditec.** { *; }
 
 # MLKit Text Recognition optional language modules
 -dontwarn com.google.mlkit.vision.text.chinese.**

@@ -10,26 +10,26 @@ import '../../../../core/router/app_router.dart';
 import '../providers/learning_provider.dart';
 
 class LessonScreen extends ConsumerWidget {
-  final String lessonId; // Actually acts as courseId from the router
+  final String lessonId; // Acts as courseId
   const LessonScreen({super.key, required this.lessonId});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(learningProvider);
     final notifier = ref.read(learningProvider.notifier);
-    
-    // Find the course
-    final course = availableCourses.firstWhere((c) => c.id == lessonId, 
-        orElse: () => availableCourses.first);
+
+    final course = availableCourses.firstWhere(
+      (c) => c.id == lessonId,
+      orElse: () => availableCourses.first,
+    );
 
     final completedLessons = state.completedLessonsPerCourse[course.id] ?? 0;
     final isCourseCompleted = state.completedCourses.contains(course.id);
-    
-    // Determine what to show
+
     if (isCourseCompleted) {
       return _buildCourseCompletedView(context, course);
     }
-    
+
     if (completedLessons >= course.lessons.length) {
       return _buildReadyForQuizView(context, course);
     }
@@ -40,7 +40,7 @@ class LessonScreen extends ConsumerWidget {
     return Scaffold(
       appBar: CyberAppBar(
         title: course.title,
-        subtitle: 'Lesson ${completedLessons + 1} of ${course.lessons.length}',
+        subtitle: 'Lesson ${completedLessons + 1} of ${course.lessons.length} • ${course.duration}',
         showBack: true,
       ),
       body: Container(
@@ -59,37 +59,150 @@ class LessonScreen extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      height: 120,
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: AppColors.darkSurfaceVariant,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: AppColors.primaryCyan.withValues(alpha: 0.3)),
-                      ),
-                      child: Center(
-                        child: Icon(_getIconForName(course.iconName), size: 48, color: AppColors.primaryCyan),
+                    // Header Card
+                    GlassCard(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primaryCyan.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: AppColors.primaryCyan.withValues(alpha: 0.4)),
+                                ),
+                                child: Text(
+                                  'MODULE ${completedLessons + 1}',
+                                  style: const TextStyle(color: AppColors.primaryCyan, fontSize: 11, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: AppColors.darkSurfaceVariant,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  course.level,
+                                  style: const TextStyle(color: AppColors.darkOnSurfaceVariant, fontSize: 11),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Text(currentLesson.title, style: AppTypography.headlineSmall.copyWith(color: AppColors.darkOnSurface)),
+                          const SizedBox(height: 4),
+                          Text(currentLesson.subtitle, style: AppTypography.bodySmall.copyWith(color: AppColors.primaryCyanLight)),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 24),
-                    Text(currentLesson.title, style: AppTypography.headlineSmall.copyWith(color: AppColors.darkOnSurface)),
-                    const SizedBox(height: 16),
-                    Text(
-                      currentLesson.content,
-                      style: AppTypography.bodyMedium.copyWith(color: AppColors.darkOnSurface, height: 1.6),
+                    const SizedBox(height: 20),
+
+                    // Conceptual Explanation
+                    Text('Core Concepts & Technical Architecture', style: AppTypography.titleSmall.copyWith(color: AppColors.darkOnSurface, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 10),
+                    GlassCard(
+                      padding: const EdgeInsets.all(18),
+                      child: Text(
+                        currentLesson.content,
+                        style: AppTypography.bodyMedium.copyWith(color: AppColors.darkOnSurface, height: 1.65, fontSize: 14),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Attack Scenario / Case Study
+                    Row(
+                      children: [
+                        const Icon(Icons.warning_amber_rounded, color: AppColors.danger, size: 20),
+                        const SizedBox(width: 8),
+                        Text('Real-World Attack Case Study', style: AppTypography.titleSmall.copyWith(color: AppColors.danger, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    GlassCard(
+                      borderColor: AppColors.danger.withValues(alpha: 0.3),
+                      padding: const EdgeInsets.all(16),
+                      child: Text(
+                        currentLesson.attackScenario,
+                        style: AppTypography.bodySmall.copyWith(color: AppColors.darkOnSurface, height: 1.5, fontSize: 13),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Defense Checklist
+                    Row(
+                      children: [
+                        const Icon(Icons.security_rounded, color: AppColors.neonGreen, size: 20),
+                        const SizedBox(width: 8),
+                        Text('Actionable Defense Playbook', style: AppTypography.titleSmall.copyWith(color: AppColors.neonGreen, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    GlassCard(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: currentLesson.defenseChecklist.map((tip) => Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(Icons.check_circle_outline_rounded, color: AppColors.neonGreen, size: 18),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(tip, style: const TextStyle(color: AppColors.darkOnSurface, height: 1.4, fontSize: 13)),
+                              ),
+                            ],
+                          ),
+                        )).toList(),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Key Takeaway
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.accentPurple.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.accentPurple.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.lightbulb_outline_rounded, color: AppColors.accentPurpleLight, size: 22),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('KEY TAKEAWAY', style: TextStyle(color: AppColors.accentPurpleLight, fontWeight: FontWeight.bold, fontSize: 11)),
+                                const SizedBox(height: 4),
+                                Text(currentLesson.keyTakeaway, style: const TextStyle(color: AppColors.darkOnSurface, fontWeight: FontWeight.w600, fontSize: 13)),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 32),
+
+                    // Complete Lesson Button
                     GradientButton(
-                      label: 'Complete Lesson (+20 XP)',
+                      label: completedLessons + 1 == course.lessons.length ? 'Finish Course Modules (+25 XP)' : 'Next Lesson (+25 XP)',
                       icon: Icons.check_circle_rounded,
                       gradient: const LinearGradient(colors: [AppColors.neonGreen, AppColors.primaryCyan]),
                       onPressed: () {
                         notifier.completeLesson(course.id);
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('+20 XP Earned!'), backgroundColor: AppColors.neonGreen)
+                          const SnackBar(content: Text('🎉 +25 XP Earned! Great progress!'), backgroundColor: AppColors.neonGreen),
                         );
                       },
                     ),
+                    const SizedBox(height: 20),
                   ],
                 ),
               ),
@@ -102,36 +215,44 @@ class LessonScreen extends ConsumerWidget {
 
   Widget _buildReadyForQuizView(BuildContext context, CourseEntity course) {
     return Scaffold(
-      appBar: CyberAppBar(title: course.title, subtitle: 'Final Challenge', showBack: true),
+      appBar: CyberAppBar(title: course.title, subtitle: 'Certification Ready', showBack: true),
       body: Container(
         decoration: const BoxDecoration(gradient: AppColors.backgroundGradient),
+        padding: const EdgeInsets.all(24),
         child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: GlassCard(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.school_rounded, size: 64, color: AppColors.accentPurple),
-                  const SizedBox(height: 24),
-                  Text('Ready for the Quiz?', style: AppTypography.headlineSmall.copyWith(color: AppColors.darkOnSurface)),
-                  const SizedBox(height: 16),
-                  Text(
-                    'You have completed all lessons in this course. Take the final quiz and score at least 70% to earn your completion badge and 100 bonus XP!',
-                    textAlign: TextAlign.center,
-                    style: AppTypography.bodyMedium.copyWith(color: AppColors.darkOnSurfaceVariant),
-                  ),
-                  const SizedBox(height: 32),
-                  GradientButton(
-                    label: 'Start Quiz',
-                    icon: Icons.play_arrow_rounded,
-                    gradient: const LinearGradient(colors: [AppColors.accentPurple, AppColors.primaryCyan]),
-                    onPressed: () => context.push('/quiz/${course.id}'),
-                  ),
-                ],
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 90,
+                height: 90,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppColors.accentPurple.withValues(alpha: 0.15),
+                  border: Border.all(color: AppColors.accentPurple, width: 2),
+                ),
+                child: const Center(
+                  child: Icon(Icons.school_rounded, size: 44, color: AppColors.accentPurpleLight),
+                ),
               ),
-            ),
+              const SizedBox(height: 24),
+              Text('All Modules Completed!', style: AppTypography.headlineSmall.copyWith(color: AppColors.darkOnSurface)),
+              const SizedBox(height: 12),
+              Text(
+                'You have completed all technical lessons in "${course.title}". Pass the final interactive knowledge exam to earn your Defender Certification (+100 XP).',
+                style: AppTypography.bodyMedium.copyWith(color: AppColors.darkOnSurfaceVariant),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+              GradientButton(
+                label: 'Take Certification Exam',
+                icon: Icons.quiz_rounded,
+                gradient: const LinearGradient(colors: [AppColors.accentPurple, AppColors.primaryCyan]),
+                onPressed: () {
+                  context.push(RoutePaths.quiz.replaceAll(':id', course.id));
+                },
+              ),
+            ],
           ),
         ),
       ),
@@ -140,57 +261,45 @@ class LessonScreen extends ConsumerWidget {
 
   Widget _buildCourseCompletedView(BuildContext context, CourseEntity course) {
     return Scaffold(
-      appBar: CyberAppBar(title: course.title, subtitle: 'Course Completed', showBack: true),
+      appBar: CyberAppBar(title: course.title, subtitle: 'Certified Defender', showBack: true),
       body: Container(
         decoration: const BoxDecoration(gradient: AppColors.backgroundGradient),
+        padding: const EdgeInsets.all(24),
         child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: GlassCard(
-              padding: const EdgeInsets.all(32),
-              borderColor: AppColors.neonGreen,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: AppColors.neonGreen.withValues(alpha: 0.2),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.verified_rounded, size: 64, color: AppColors.neonGreen),
-                  ),
-                  const SizedBox(height: 24),
-                  Text('Course Mastered!', style: AppTypography.headlineSmall.copyWith(color: AppColors.darkOnSurface)),
-                  const SizedBox(height: 16),
-                  Text(
-                    'You have successfully passed the final quiz for ${course.title}.',
-                    textAlign: TextAlign.center,
-                    style: AppTypography.bodyMedium.copyWith(color: AppColors.darkOnSurfaceVariant),
-                  ),
-                  const SizedBox(height: 32),
-                  GradientButton(
-                    label: 'Return to Academy',
-                    icon: Icons.arrow_back_rounded,
-                    onPressed: () => context.pop(),
-                  ),
-                ],
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 90,
+                height: 90,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppColors.neonGreen.withValues(alpha: 0.15),
+                  border: Border.all(color: AppColors.neonGreen, width: 2),
+                ),
+                child: const Center(
+                  child: Icon(Icons.verified_rounded, size: 44, color: AppColors.neonGreen),
+                ),
               ),
-            ),
+              const SizedBox(height: 24),
+              Text('Course Mastery Achieved!', style: AppTypography.headlineSmall.copyWith(color: AppColors.darkOnSurface)),
+              const SizedBox(height: 12),
+              Text(
+                'You have mastered "${course.title}" and passed the certification examination. You are fully equipped with modern defensive tactics.',
+                style: AppTypography.bodyMedium.copyWith(color: AppColors.darkOnSurfaceVariant),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+              GradientButton(
+                label: 'Explore Other Masterclasses',
+                icon: Icons.menu_book_rounded,
+                gradient: AppColors.primaryGradient,
+                onPressed: () => context.pop(),
+              ),
+            ],
           ),
         ),
       ),
     );
-  }
-
-  IconData _getIconForName(String name) {
-    switch(name) {
-      case 'phishing': return Icons.phishing_rounded;
-      case 'password': return Icons.password_rounded;
-      case 'psychology': return Icons.psychology_rounded;
-      case 'wifi': return Icons.wifi_rounded;
-      case 'phone_android': return Icons.phone_android_rounded;
-      default: return Icons.book_rounded;
-    }
   }
 }

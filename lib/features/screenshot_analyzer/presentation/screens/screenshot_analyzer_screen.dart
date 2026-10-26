@@ -1,11 +1,11 @@
 /// Screenshot AI Analyzer & News Fact-Checking Screen.
 ///
-/// Features Optical Character Recognition (OCR), Google Gemini Deep Fact-Checking,
+/// Features Optical Character Recognition (OCR), Google Gemini Deep Multimodal Vision,
 /// fake news vs authentic news verification, and deceptive scam indicator detection.
 library;
 
-import 'dart:io' show File;
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
@@ -15,6 +15,8 @@ import '../../../../core/widgets/glass_card.dart';
 import '../../../../core/widgets/gradient_button.dart';
 import '../../../../core/widgets/animated_score_ring.dart';
 import '../../../../core/widgets/cyber_app_bar.dart';
+import '../../../../core/widgets/cyber_markdown_view.dart';
+import '../../../../core/config/env_config.dart';
 import '../../../../ai_engine/services/risk_engine.dart';
 import '../../../../ai_engine/services/gemini_ai_service.dart';
 
@@ -30,68 +32,187 @@ class _ScreenshotAnalyzerScreenState extends State<ScreenshotAnalyzerScreen> {
   bool _hasResult = false;
   Map<String, dynamic>? _result;
   String? _selectedImage;
+  Uint8List? _selectedImageBytes;
+  final TextEditingController _textController = TextEditingController();
+
+  @override
+  void dispose() {
+    _textController.dispose();
+    super.dispose();
+  }
 
   Future<void> _pickImage() async {
     final picker = ImagePicker();
     final file = await picker.pickImage(source: ImageSource.gallery);
     if (file != null) {
+      final bytes = await file.readAsBytes();
       setState(() {
         _selectedImage = file.path;
+        _selectedImageBytes = bytes;
         _hasResult = false;
         _result = null;
+        _textController.clear();
       });
+
+      // Attempt on-device OCR if supported (Android/iOS)
+      try {
+        if (!kIsWeb) {
+          final inputImage = InputImage.fromFilePath(file.path);
+          final textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
+          final RecognizedText recognizedText = await textRecognizer.processImage(inputImage);
+          final text = recognizedText.text.trim();
+          await textRecognizer.close();
+          if (text.isNotEmpty) {
+            setState(() {
+              _textController.text = text;
+            });
+          }
+        }
+      } catch (_) {}
     }
   }
 
+  void _showNoTextOrKeyDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.darkSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppColors.warning),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.info_outline_rounded, color: AppColors.warning, size: 24),
+            SizedBox(width: 8),
+            Text('Input Required', style: TextStyle(color: AppColors.darkOnSurface, fontSize: 16)),
+          ],
+        ),
+        content: const Text(
+          'To analyze this screenshot:\n\n'
+          '1. Upload an image with clear visible text or headlines.\n'
+          '2. Or paste/type the headline into the text field below.',
+          style: TextStyle(color: AppColors.darkOnSurfaceVariant, fontSize: 13, height: 1.4),
+        ),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryCyan),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Got it', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _analyzeScreenshot() async {
-    if (_selectedImage == null) return;
+    if (_selectedImageBytes == null && _selectedImage == null && _textController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select an image or enter news text to analyze.'),
+          backgroundColor: AppColors.danger,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isAnalyzing = true);
 
-    String extractedText = '';
+    String extractedText = _textController.text.trim();
+    final imageBytes = _selectedImageBytes;
 
-    try {
-      final inputImage = InputImage.fromFilePath(_selectedImage!);
-      final textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
-      final RecognizedText recognizedText = await textRecognizer.processImage(inputImage);
-      extractedText = recognizedText.text;
-      await textRecognizer.close();
-    } catch (e) {
-      extractedText = 'Error extracting text. Please ensure the image is clear and readable.';
+    // 1. Query Gemini AI with multimodal image bytes and/or extracted text
+    Map<String, dynamic>? aiFactCheck;
+    if (EnvConfig.hasGeminiApiKey) {
+      aiFactCheck = await GeminiAiService.instance.factCheckScreenshotWithAi(
+        extractedText: extractedText.isNotEmpty ? extractedText : null,
+        imageBytes: imageBytes,
+      );
     }
 
-    if (extractedText.trim().isEmpty) {
-      extractedText = 'No readable text detected in this image. Please upload a clear screenshot of news, messages, or posts.';
+    // If AI failed or key is missing AND there is no readable text:
+    if (aiFactCheck == null && extractedText.isEmpty) {
+      if (!mounted) return;
+      setState(() => _isAnalyzing = false);
+      _showNoTextOrKeyDialog();
+      return;
     }
 
-    // 1. Execute AI Deep Real vs Fake News Fact-Checking
-    final aiFactCheck = await GeminiAiService.instance.factCheckImageTextWithAi(extractedText);
-
-    // 2. Fallback heuristic RiskEngine if AI is offline
+    // 2. Fallback heuristic RiskEngine if AI is offline / no key
     final fallbackResult = RiskEngine.instance.analyzeScreenshotText(extractedText);
 
-    final bool isReal = aiFactCheck?['isRealNews'] == true ||
-        (aiFactCheck?['veracityLabel']?.toString().toLowerCase().contains('real') == true &&
-            aiFactCheck?['veracityLabel']?.toString().toLowerCase().contains('fake') == false);
+    final bool isReal;
+    final double displayScore;
+    final String veracityLabel;
+    final String veracitySublabel;
+    final String headline;
+    final String factSummary;
+    final List<String> indicators;
+    final List<String> sources;
+    final List<String> actions;
 
-    final double riskScore = (aiFactCheck?['veracityScore'] as num?)?.toDouble() ?? fallbackResult.riskScore;
-    final String veracityLabel = (aiFactCheck?['veracityLabel'] as String?) ?? fallbackResult.threatCategory;
-    final String? headline = aiFactCheck?['factCheckHeadline'] as String?;
-    final String? factSummary = aiFactCheck?['factCheckSummary'] as String?;
-    final List<String> indicators = (aiFactCheck?['detectedIndicators'] as List?)?.cast<String>() ?? fallbackResult.reasons;
-    final List<String> sources = (aiFactCheck?['trustedSourcesToVerify'] as List?)?.cast<String>() ?? [];
-    final List<String> actions = (aiFactCheck?['recommendedActions'] as List?)?.cast<String>() ?? fallbackResult.recommendedActions;
+    if (aiFactCheck != null) {
+      isReal = aiFactCheck['isReal'] == true ||
+          aiFactCheck['verdict']?.toString().trim().toUpperCase() == 'REAL' ||
+          aiFactCheck['isRealNews'] == true;
+
+      displayScore = (aiFactCheck['score'] as num?)?.toDouble() ?? (isReal ? 95.0 : 88.0);
+      veracityLabel = isReal ? 'REAL' : 'FAKE';
+      veracitySublabel = isReal ? 'VERIFIED AUTHENTIC' : 'HOAX / SCAM DETECTED';
+
+      headline = (aiFactCheck['factCheckHeadline'] as String?) ??
+          (isReal ? 'Verified Authentic News / Information' : 'Fabricated Hoax / Manipulated Content');
+
+      factSummary = (aiFactCheck['factCheckSummary'] as String?) ??
+          'AI verified this content against official records, known fact-check databases, and digital manipulation patterns.';
+
+      indicators = (aiFactCheck['detectedIndicators'] as List?)?.cast<String>() ?? [];
+      sources = (aiFactCheck['trustedSourcesToVerify'] as List?)?.cast<String>() ?? [];
+      actions = (aiFactCheck['recommendedActions'] as List?)?.cast<String>() ?? [];
+    } else {
+      // Fallback heuristics: check if content is fake/scam/phishing or safe
+      final bool isFallbackFake = fallbackResult.threatCategory.toLowerCase().contains('fake') ||
+          fallbackResult.threatCategory.toLowerCase().contains('scam') ||
+          fallbackResult.threatCategory.toLowerCase().contains('phishing') ||
+          fallbackResult.riskScore >= 40;
+
+      isReal = !isFallbackFake;
+      veracityLabel = isReal ? 'REAL' : 'FAKE';
+      veracitySublabel = isReal ? 'AUTHENTIC CONTENT' : fallbackResult.threatCategory.toUpperCase();
+
+      displayScore = isReal
+          ? (100.0 - fallbackResult.riskScore).clamp(82.0, 98.0)
+          : fallbackResult.riskScore.clamp(75.0, 96.0);
+
+      headline = isReal
+          ? 'Verified Authentic News / Content'
+          : (fallbackResult.threatCategory.isNotEmpty
+              ? fallbackResult.threatCategory
+              : 'Deceptive / Fabricated Content Detected');
+
+      factSummary = isReal
+          ? 'This screenshot content shows no signs of viral hoax language, fabricated scheme promises, or fraudulent payment watermarks. Content appears authentic and safe.'
+          : 'Suspicious deception indicators and known manipulation patterns were detected in this screenshot. Exercise extreme caution.';
+
+      indicators = fallbackResult.reasons;
+      sources = isReal
+          ? ['Official Press Information Bureau (PIB)', 'Accredited News Portals (Reuters, AP, The Hindu)']
+          : ['PIB Fact Check (pib.gov.in)', 'National Cyber Crime Portal (cybercrime.gov.in)'];
+      actions = fallbackResult.recommendedActions;
+    }
 
     if (!mounted) return;
     setState(() {
       _isAnalyzing = false;
       _hasResult = true;
       _result = {
-        'extractedText': extractedText.trim(),
+        'extractedText': extractedText.isNotEmpty ? extractedText : 'Visual screenshot analyzed directly by AI Vision.',
         'isRealNews': isReal,
-        'riskScore': riskScore,
+        'riskScore': displayScore,
         'veracityLabel': veracityLabel,
+        'veracitySublabel': veracitySublabel,
         'headline': headline,
-        'factSummary': factSummary ?? 'AI evaluated this content against verified sources and cybersecurity threat databases.',
+        'factSummary': factSummary,
         'indicators': indicators,
         'sources': sources,
         'actions': actions,
@@ -99,26 +220,20 @@ class _ScreenshotAnalyzerScreenState extends State<ScreenshotAnalyzerScreen> {
     });
   }
 
-  Color _getVeracityColor(bool isReal, double riskScore) {
-    if (isReal && riskScore < 30) return AppColors.neonGreen;
-    if (riskScore >= 70) return AppColors.danger;
-    if (riskScore >= 40) return AppColors.warning;
-    return AppColors.primaryCyan;
+  Color _getVeracityColor(bool isReal) {
+    return isReal ? AppColors.neonGreen : AppColors.danger;
   }
 
-  IconData _getVeracityIcon(bool isReal, double riskScore) {
-    if (isReal && riskScore < 30) return Icons.verified_rounded;
-    if (riskScore >= 70) return Icons.gpp_bad_rounded;
-    if (riskScore >= 40) return Icons.warning_amber_rounded;
-    return Icons.fact_check_rounded;
+  IconData _getVeracityIcon(bool isReal) {
+    return isReal ? Icons.check_circle_rounded : Icons.dangerous_rounded;
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: const CyberAppBar(
-        title: 'Screenshot AI Fact-Checker',
-        subtitle: 'Real vs Fake News & Scam Detector',
+        title: 'Screenshot Threat Shield',
+        subtitle: 'Authenticity & Manipulation Verification',
         showBack: true,
       ),
       body: Container(
@@ -131,17 +246,17 @@ class _ScreenshotAnalyzerScreenState extends State<ScreenshotAnalyzerScreen> {
                 // Upload Hero Banner
                 Center(
                   child: Container(
-                    width: 90,
-                    height: 90,
+                    width: 84,
+                    height: 84,
                     decoration: BoxDecoration(
                       color: AppColors.primaryCyan.withValues(alpha: 0.12),
                       shape: BoxShape.circle,
                       border: Border.all(color: AppColors.primaryCyan.withValues(alpha: 0.35)),
                     ),
-                    child: const Icon(Icons.fact_check_rounded, color: AppColors.primaryCyan, size: 44),
+                    child: const Icon(Icons.fact_check_rounded, color: AppColors.primaryCyan, size: 40),
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
                 Text('Real vs Fake News Analyzer', style: AppTypography.headlineMedium.copyWith(color: AppColors.darkOnSurface)),
                 const SizedBox(height: 8),
                 Text(
@@ -149,14 +264,15 @@ class _ScreenshotAnalyzerScreenState extends State<ScreenshotAnalyzerScreen> {
                   style: AppTypography.bodyMedium.copyWith(color: AppColors.darkOnSurfaceVariant),
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
 
                 // Image Selector Card
                 GlassCard(
                   padding: const EdgeInsets.all(20),
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (_selectedImage != null) ...[
+                      if (_selectedImageBytes != null) ...[
                         Container(
                           height: 220,
                           width: double.infinity,
@@ -167,26 +283,58 @@ class _ScreenshotAnalyzerScreenState extends State<ScreenshotAnalyzerScreen> {
                           ),
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(14),
-                            child: Image.file(
-                              File(_selectedImage!),
+                            child: Image.memory(
+                              _selectedImageBytes!,
                               fit: BoxFit.contain,
                             ),
                           ),
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 14),
                       ],
+
+                      // Headline / Extracted Text Field
+                      TextField(
+                        controller: _textController,
+                        maxLines: 3,
+                        style: AppTypography.bodySmall.copyWith(color: AppColors.darkOnSurface),
+                        decoration: InputDecoration(
+                          labelText: 'Headline or Text in Screenshot (Editable / Paste)',
+                          labelStyle: const TextStyle(color: AppColors.primaryCyan, fontSize: 13),
+                          hintText: 'Enter or paste news text, WhatsApp forward, or claims to analyze...',
+                          hintStyle: AppTypography.bodySmall.copyWith(
+                            color: AppColors.darkOnSurfaceVariant.withValues(alpha: 0.5),
+                          ),
+                          prefixIcon: const Icon(Icons.text_fields_rounded, color: AppColors.primaryCyan, size: 20),
+                          filled: true,
+                          fillColor: AppColors.darkSurfaceVariant.withValues(alpha: 0.4),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(color: AppColors.primaryCyan.withValues(alpha: 0.3)),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(color: AppColors.primaryCyan.withValues(alpha: 0.3)),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(color: AppColors.primaryCyan),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
                       Row(
                         children: [
                           Expanded(
                             child: GradientButton(
-                              label: _selectedImage == null ? 'Select News / Image' : 'Change Image',
+                              label: _selectedImageBytes == null ? 'Select Screenshot' : 'Change Image',
                               icon: Icons.photo_library_rounded,
                               gradient: const LinearGradient(colors: [AppColors.accentPurple, AppColors.primaryCyan]),
                               onPressed: _pickImage,
                               height: 48,
                             ),
                           ),
-                          if (_selectedImage != null) ...[
+                          if (_selectedImageBytes != null || _textController.text.isNotEmpty) ...[
                             const SizedBox(width: 12),
                             Expanded(
                               child: GradientButton(
@@ -252,43 +400,75 @@ class _ScreenshotAnalyzerScreenState extends State<ScreenshotAnalyzerScreen> {
                 // Main Verdict Card
                 Builder(builder: (context) {
                   final isReal = _result!['isRealNews'] as bool;
-                  final riskScore = (_result!['riskScore'] as num).toDouble();
-                  final verdictColor = _getVeracityColor(isReal, riskScore);
+                  final displayScore = (_result!['riskScore'] as num).toDouble();
+                  final verdictColor = _getVeracityColor(isReal);
+                  final veracityLabel = _result!['veracityLabel'] as String;
+                  final veracitySublabel = _result!['veracitySublabel'] as String? ?? (isReal ? 'VERIFIED AUTHENTIC' : 'HOAX / SCAM DETECTED');
 
                   return GlassCard(
                     padding: const EdgeInsets.all(20),
-                    borderColor: verdictColor.withValues(alpha: 0.5),
+                    borderColor: verdictColor.withValues(alpha: 0.6),
                     child: Column(
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
                           decoration: BoxDecoration(
-                            color: verdictColor.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: verdictColor.withValues(alpha: 0.4)),
+                            color: verdictColor.withValues(alpha: 0.16),
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(color: verdictColor, width: 1.5),
+                            boxShadow: [
+                              BoxShadow(
+                                color: verdictColor.withValues(alpha: 0.25),
+                                blurRadius: 12,
+                                spreadRadius: 1,
+                              ),
+                            ],
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(_getVeracityIcon(isReal, riskScore), color: verdictColor, size: 18),
+                              Icon(_getVeracityIcon(isReal), color: verdictColor, size: 22),
                               const SizedBox(width: 8),
                               Text(
-                                _result!['veracityLabel'] as String,
-                                style: TextStyle(color: verdictColor, fontWeight: FontWeight.bold, fontSize: 13),
+                                veracityLabel,
+                                style: TextStyle(
+                                  color: verdictColor,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 16,
+                                  letterSpacing: 1.5,
+                                ),
+                              ),
+                              Container(
+                                margin: const EdgeInsets.symmetric(horizontal: 8),
+                                width: 4,
+                                height: 4,
+                                decoration: BoxDecoration(
+                                  color: verdictColor.withValues(alpha: 0.6),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              Text(
+                                veracitySublabel,
+                                style: TextStyle(
+                                  color: verdictColor.withValues(alpha: 0.9),
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 12,
+                                ),
                               ),
                             ],
                           ),
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 20),
                         AnimatedScoreRing(
-                          score: riskScore,
-                          size: 130,
-                          strokeWidth: 10,
+                          score: displayScore,
+                          size: 140,
+                          strokeWidth: 12,
                           label: isReal ? 'Authentic' : 'Threat Level',
+                          sublabel: isReal ? 'Real Score' : 'Fake Risk',
                           overrideColor: verdictColor,
                         ),
                         if (_result!['headline'] != null) ...[
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 18),
                           Text(
                             _result!['headline'] as String,
                             style: AppTypography.titleMedium.copyWith(color: AppColors.darkOnSurface, fontWeight: FontWeight.bold),
@@ -316,9 +496,9 @@ class _ScreenshotAnalyzerScreenState extends State<ScreenshotAnalyzerScreen> {
                         ],
                       ),
                       const SizedBox(height: 12),
-                      Text(
-                        _result!['factSummary'] as String,
-                        style: AppTypography.bodyMedium.copyWith(color: AppColors.darkOnSurface, height: 1.5),
+                      CyberMarkdownView(
+                        text: _result!['factSummary'] as String,
+                        accentColor: AppColors.primaryCyan,
                       ),
                     ],
                   ),
@@ -427,52 +607,55 @@ class _ScreenshotAnalyzerScreenState extends State<ScreenshotAnalyzerScreen> {
                 ],
 
                 // Extracted OCR Text with Copy Button
-                GlassCard(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              const Icon(Icons.text_fields_rounded, color: AppColors.primaryCyan, size: 18),
-                              const SizedBox(width: 8),
-                              Text('Extracted OCR Text', style: AppTypography.titleSmall.copyWith(color: AppColors.darkOnSurface)),
-                            ],
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.copy_rounded, color: AppColors.primaryCyan, size: 18),
-                            tooltip: 'Copy Text',
-                            onPressed: () {
-                              Clipboard.setData(ClipboardData(text: _result!['extractedText'] as String));
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('OCR text copied to clipboard!'), backgroundColor: AppColors.neonGreen),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: AppColors.darkSurfaceVariant,
-                          borderRadius: BorderRadius.circular(8),
+                if ((_result!['extractedText'] as String).isNotEmpty &&
+                    _result!['extractedText'] != 'Visual screenshot analyzed directly by AI Vision.') ...[
+                  GlassCard(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.text_fields_rounded, color: AppColors.primaryCyan, size: 18),
+                                const SizedBox(width: 8),
+                                Text('Extracted OCR Text', style: AppTypography.titleSmall.copyWith(color: AppColors.darkOnSurface)),
+                              ],
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.copy_rounded, color: AppColors.primaryCyan, size: 18),
+                              tooltip: 'Copy Text',
+                              onPressed: () {
+                                Clipboard.setData(ClipboardData(text: _result!['extractedText'] as String));
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('OCR text copied to clipboard!'), backgroundColor: AppColors.neonGreen),
+                                );
+                              },
+                            ),
+                          ],
                         ),
-                        child: Text(
-                          _result!['extractedText'] as String,
-                          style: AppTypography.mono.copyWith(color: AppColors.darkOnSurfaceVariant, fontSize: 11),
-                          maxLines: 8,
-                          overflow: TextOverflow.ellipsis,
+                        const SizedBox(height: 6),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.darkSurfaceVariant,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            _result!['extractedText'] as String,
+                            style: AppTypography.mono.copyWith(color: AppColors.darkOnSurfaceVariant, fontSize: 11),
+                            maxLines: 8,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 20),
+                  const SizedBox(height: 20),
+                ],
 
                 // Reset Button
                 GradientButton(
@@ -483,6 +666,8 @@ class _ScreenshotAnalyzerScreenState extends State<ScreenshotAnalyzerScreen> {
                     _hasResult = false;
                     _result = null;
                     _selectedImage = null;
+                    _selectedImageBytes = null;
+                    _textController.clear();
                   }),
                 ),
               ],

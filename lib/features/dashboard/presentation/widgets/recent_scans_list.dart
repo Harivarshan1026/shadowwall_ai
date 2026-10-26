@@ -58,7 +58,6 @@ class RecentScansList extends StatelessWidget {
         final type = scan['type'] as String;
         final input = scan['input'] as String;
         final riskScore = (scan['riskScore'] as num).toDouble();
-        final category = scan['category'] as String;
         final time = scan['time'] as DateTime;
 
         return Padding(

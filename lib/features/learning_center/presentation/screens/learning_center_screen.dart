@@ -15,16 +15,15 @@ class LearningCenterScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(learningProvider);
     final notifier = ref.read(learningProvider.notifier);
-    
-    // Calculate Level based on XP (every 100 XP is 1 level)
+
     final int level = (state.totalXp ~/ 100) + 1;
     final int xpInCurrentLevel = state.totalXp % 100;
     final double levelProgress = xpInCurrentLevel / 100;
 
     return Scaffold(
       appBar: const CyberAppBar(
-        title: 'Cyber Academy',
-        subtitle: 'Level up your security knowledge',
+        title: 'Cyber Defense Academy',
+        subtitle: 'In-depth masterclasses & certifications',
       ),
       body: Container(
         decoration: const BoxDecoration(gradient: AppColors.backgroundGradient),
@@ -39,14 +38,15 @@ class LearningCenterScreen extends ConsumerWidget {
                 child: Row(
                   children: [
                     Container(
-                      width: 60, height: 60,
+                      width: 60,
+                      height: 60,
                       decoration: BoxDecoration(
                         color: AppColors.primaryCyan.withValues(alpha: 0.2),
                         shape: BoxShape.circle,
                         border: Border.all(color: AppColors.primaryCyan),
                       ),
                       child: Center(
-                        child: Text('Lvl $level', style: const TextStyle(color: AppColors.primaryCyan, fontWeight: FontWeight.bold)),
+                        child: Text('Lvl $level', style: const TextStyle(color: AppColors.primaryCyan, fontWeight: FontWeight.bold, fontSize: 16)),
                       ),
                     ),
                     const SizedBox(width: 16),
@@ -54,7 +54,7 @@ class LearningCenterScreen extends ConsumerWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Cyber Defender', style: AppTypography.titleMedium.copyWith(color: AppColors.darkOnSurface)),
+                          Text('Cyber Defense Specialist', style: AppTypography.titleMedium.copyWith(color: AppColors.darkOnSurface)),
                           const SizedBox(height: 8),
                           ClipRRect(
                             borderRadius: BorderRadius.circular(4),
@@ -66,7 +66,10 @@ class LearningCenterScreen extends ConsumerWidget {
                             ),
                           ),
                           const SizedBox(height: 4),
-                          Text('$xpInCurrentLevel / 100 XP to Level ${level + 1}', style: AppTypography.labelSmall.copyWith(color: AppColors.darkOnSurfaceVariant)),
+                          Text(
+                            '$xpInCurrentLevel / 100 XP to Level ${level + 1} • Total XP: ${state.totalXp}',
+                            style: AppTypography.labelSmall.copyWith(color: AppColors.darkOnSurfaceVariant),
+                          ),
                         ],
                       ),
                     ),
@@ -75,18 +78,18 @@ class LearningCenterScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 24),
 
-              Text('Featured Courses', style: AppTypography.headlineSmall.copyWith(color: AppColors.darkOnSurface)),
+              Text('Masterclass Curriculum', style: AppTypography.headlineSmall.copyWith(color: AppColors.darkOnSurface)),
+              const SizedBox(height: 6),
+              Text(
+                'Comprehensive technical courses with real attack case studies, architecture breakdowns, and certifications.',
+                style: AppTypography.bodySmall.copyWith(color: AppColors.darkOnSurfaceVariant),
+              ),
               const SizedBox(height: 16),
 
               ...availableCourses.map((course) {
                 return _buildCourseCard(
-                  context, 
-                  course.id,
-                  course.title,
-                  course.description,
-                  _getIconForName(course.iconName),
-                  _getColorForCourse(course.id),
-                  '${course.lessons.length} Lessons', 
+                  context,
+                  course,
                   notifier.getCourseStatus(course.id),
                 );
               }),
@@ -98,42 +101,63 @@ class LearningCenterScreen extends ConsumerWidget {
   }
 
   IconData _getIconForName(String name) {
-    switch(name) {
-      case 'phishing': return Icons.phishing_rounded;
-      case 'password': return Icons.password_rounded;
-      case 'psychology': return Icons.psychology_rounded;
-      case 'wifi': return Icons.wifi_rounded;
-      case 'phone_android': return Icons.phone_android_rounded;
-      default: return Icons.book_rounded;
+    switch (name) {
+      case 'phishing':
+        return Icons.phishing_rounded;
+      case 'psychology':
+        return Icons.psychology_rounded;
+      case 'wifi':
+        return Icons.wifi_rounded;
+      case 'phone_android':
+        return Icons.phone_android_rounded;
+      default:
+        return Icons.security_rounded;
     }
   }
 
   Color _getColorForCourse(String id) {
-    switch(id) {
-      case 'c1': return AppColors.danger;
-      case 'c2': return AppColors.primaryCyan;
-      case 'c3': return AppColors.accentPurple;
-      case 'c4': return AppColors.warning;
-      case 'c5': return AppColors.neonGreen;
-      default: return AppColors.primaryCyan;
+    switch (id) {
+      case 'c1':
+        return AppColors.danger;
+      case 'c2':
+        return AppColors.warning;
+      case 'c3':
+        return AppColors.primaryCyan;
+      case 'c4':
+        return AppColors.accentPurple;
+      case 'c5':
+        return AppColors.danger;
+      case 'c6':
+        return AppColors.neonGreen;
+      case 'c7':
+        return Colors.tealAccent;
+      case 'c8':
+        return AppColors.primaryCyanLight;
+      default:
+        return AppColors.primaryCyan;
     }
   }
 
-  Widget _buildCourseCard(BuildContext context, String id, String title, String desc, IconData icon, Color color, String lessons, String status) {
+  Widget _buildCourseCard(BuildContext context, CourseEntity course, String status) {
     final bool isCompleted = status == 'Completed';
+    final color = _getColorForCourse(course.id);
+    final icon = _getIconForName(course.iconName);
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: GlassCard(
-        onTap: () => context.push(RoutePaths.lesson.replaceAll(':id', id)),
+        onTap: () => context.push(RoutePaths.lesson.replaceAll(':id', course.id)),
         padding: const EdgeInsets.all(16),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              width: 56, height: 56,
+              width: 56,
+              height: 56,
               decoration: BoxDecoration(
                 color: color.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: color.withValues(alpha: 0.3)),
               ),
               child: Icon(icon, color: color, size: 28),
             ),
@@ -142,17 +166,52 @@ class LearningCenterScreen extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: AppTypography.titleMedium.copyWith(color: AppColors.darkOnSurface)),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.darkSurfaceVariant,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          course.level,
+                          style: const TextStyle(color: AppColors.darkOnSurfaceVariant, fontSize: 10, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '• ${course.duration}',
+                        style: const TextStyle(color: AppColors.darkOnSurfaceVariant, fontSize: 11),
+                      ),
+                      const Spacer(),
+                      if (isCompleted)
+                        const Icon(Icons.verified_rounded, color: AppColors.neonGreen, size: 16),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(course.title, style: AppTypography.titleMedium.copyWith(color: AppColors.darkOnSurface, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
-                  Text(desc, style: AppTypography.bodySmall.copyWith(color: AppColors.darkOnSurfaceVariant), maxLines: 2, overflow: TextOverflow.ellipsis),
+                  Text(
+                    course.description,
+                    style: AppTypography.bodySmall.copyWith(color: AppColors.darkOnSurfaceVariant),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   const SizedBox(height: 12),
                   Row(
                     children: [
-                      Icon(Icons.library_books_rounded, size: 14, color: AppColors.darkOnSurfaceVariant),
+                      const Icon(Icons.menu_book_rounded, size: 14, color: AppColors.primaryCyan),
                       const SizedBox(width: 4),
-                      Text(lessons, style: AppTypography.labelSmall.copyWith(color: AppColors.darkOnSurfaceVariant)),
+                      Text('${course.lessons.length} Modules', style: AppTypography.labelSmall.copyWith(color: AppColors.darkOnSurfaceVariant)),
                       const Spacer(),
-                      Text(status, style: AppTypography.labelSmall.copyWith(color: isCompleted ? AppColors.neonGreen : color, fontWeight: FontWeight.w600)),
+                      Text(
+                        status,
+                        style: AppTypography.labelSmall.copyWith(
+                          color: isCompleted ? AppColors.neonGreen : color,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ],
                   ),
                 ],

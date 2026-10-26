@@ -7,12 +7,33 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:883269776134:android:2c5e66902f2a9e9b12a487",
+        "mobilesdk_app_id": "1:883269776134:android:d9ded1169663118112a487",
         "android_client_info": {
           "package_name": "com.shadowwall.ai"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "883269776134-dc0hnas23srtn6bo106bca4fl4as5r8j.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.shadowwall.ai",
+            "certificate_hash": "a3147d7a388b584061452edc54715dbdf5cebd24"
+          }
+        },
+        {
+          "client_id": "883269776134-ft8f4t6vnqqgnks1ht4v96fbgjk53kkh.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.shadowwall.ai",
+            "certificate_hash": "814286dc377fc1c066c93693fb9468f09bb5295e"
+          }
+        },
+        {
+          "client_id": "883269776134-fsmbsq1tov13j3krqv7k3hobi0akf0hc.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAvL9QKLaDRVCEcJz7g-cH3o8BCDYtYbEg"
@@ -20,26 +41,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:883269776134:android:2c5e66902f2a9e9b12a487",
-        "android_client_info": {
-          "package_name": "com.example.shadowwall_ai"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyAvL9QKLaDRVCEcJz7g-cH3o8BCDYtYbEg"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "883269776134-fsmbsq1tov13j3krqv7k3hobi0akf0hc.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "883269776134-fp9h1b6mgcphj9033lep4esb0jr6pi2e.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.shadowwallAi"
+              }
+            }
+          ]
         }
       }
     }

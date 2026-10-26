@@ -23,6 +23,7 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _bgGuardActive = false;
   bool _isDeletingAccount = false;
+  bool _hasUsageStats = true;
 
   @override
   void initState() {
@@ -32,8 +33,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Future<void> _loadBgGuardState() async {
     final active = await BackgroundGuardService.instance.isGuardActive();
+    final hasUsage = await BackgroundGuardService.instance.hasUsageStatsPermission();
     if (mounted) {
-      setState(() => _bgGuardActive = active);
+      setState(() {
+        _bgGuardActive = active;
+        _hasUsageStats = hasUsage;
+      });
     }
   }
 
@@ -142,10 +147,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     });
 
     return Scaffold(
-      appBar: const CyberAppBar(
+      appBar: CyberAppBar(
         title: 'Profile & Settings',
         subtitle: 'Manage your preferences & compliance',
         showBack: true,
+        onBack: () => context.go('/'),
       ),
       body: Container(
         decoration: const BoxDecoration(gradient: AppColors.backgroundGradient),
@@ -187,29 +193,258 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
             const SizedBox(height: 24),
 
-            _buildSectionHeader('Background Guard & Device Security'),
+            _buildSectionHeader('24/7 Background Guard & Device Activity Sentinel'),
             GlassCard(
-              padding: EdgeInsets.zero,
+              padding: const EdgeInsets.all(16),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildListTile(
-                    Icons.security_rounded,
-                    'Monitor in Background',
-                    _bgGuardActive
-                        ? 'Active Guard ON (Zero personal data collection)'
-                        : 'Background Protection OFF',
-                    trailing: Switch(
-                      value: _bgGuardActive,
-                      activeColor: AppColors.neonGreen,
-                      onChanged: _toggleBgGuard,
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: _bgGuardActive
+                              ? AppColors.neonGreen.withValues(alpha: 0.15)
+                              : AppColors.darkSurfaceVariant,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(
+                          _bgGuardActive ? Icons.shield_rounded : Icons.shield_outlined,
+                          color: _bgGuardActive ? AppColors.neonGreen : AppColors.darkOnSurfaceVariant,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Real-Time Background Sentinel',
+                              style: AppTypography.titleSmall.copyWith(
+                                color: AppColors.darkOnSurface,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              _bgGuardActive
+                                  ? 'Active 24/7 • Monitoring Apps, Downloads & URLs'
+                                  : 'Protection Paused',
+                              style: AppTypography.bodySmall.copyWith(
+                                color: _bgGuardActive ? AppColors.neonGreen : AppColors.darkOnSurfaceVariant,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Switch(
+                        value: _bgGuardActive,
+                        activeColor: AppColors.neonGreen,
+                        onChanged: _toggleBgGuard,
+                      ),
+                    ],
+                  ),
+                  if (!_hasUsageStats) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.warning.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: AppColors.warning.withValues(alpha: 0.4),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.security_update_warning_rounded,
+                            color: AppColors.warning,
+                            size: 22,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Usage Access Permission Needed',
+                                  style: AppTypography.labelSmall.copyWith(
+                                    color: AppColors.warning,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Grant Usage Access so Sentinel can detect and warn you when entering malicious apps.',
+                                  style: AppTypography.bodySmall.copyWith(
+                                    color: AppColors.darkOnSurfaceVariant,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          TextButton(
+                            style: TextButton.styleFrom(
+                              backgroundColor: AppColors.warning.withValues(alpha: 0.2),
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            ),
+                            onPressed: () async {
+                              await BackgroundGuardService.instance.requestUsageStatsPermission();
+                              await Future.delayed(const Duration(seconds: 1));
+                              _loadBgGuardState();
+                            },
+                            child: const Text(
+                              'Grant',
+                              style: TextStyle(
+                                color: AppColors.warning,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 14),
+                  const Divider(color: Colors.white10, height: 1),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Active Monitoring Capabilities:',
+                    style: AppTypography.labelSmall.copyWith(
+                      color: AppColors.darkOnSurface,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                  const Divider(height: 1, color: Colors.white10),
-                  _buildListTile(
-                    Icons.fingerprint_rounded,
-                    'Biometric Security Gate',
-                    'Hardware biometric authentication for Secret Vault',
-                    trailing: Switch(value: true, onChanged: (v) {}),
+                  const SizedBox(height: 8),
+                  ...[
+                    ('New App & Download Sentinel', 'Automatically scans new Play Store & sideloaded apps upon install.'),
+                    ('Vulnerable App Activity Alert', 'Warns on background overlay injection & accessibility hijacking.'),
+                    ('Clipboard Phishing Interceptor', 'Blocks deceptive financial & phishing URLs copied to clipboard.'),
+                    ('Wi-Fi Security Sentinel', 'Audits network packets and DNS routes on wireless connections.'),
+                  ].map((cap) => Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.check_circle_rounded, color: AppColors.neonGreen, size: 14),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: RichText(
+                                text: TextSpan(
+                                  children: [
+                                    TextSpan(
+                                      text: '${cap.$1}: ',
+                                      style: AppTypography.bodySmall.copyWith(
+                                        color: AppColors.primaryCyan,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                    TextSpan(
+                                      text: cap.$2,
+                                      style: AppTypography.bodySmall.copyWith(
+                                        color: AppColors.darkOnSurfaceVariant,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )),
+                  const SizedBox(height: 14),
+                  Text(
+                    'Test Background Surveillance Triggers:',
+                    style: AppTypography.labelSmall.copyWith(
+                      color: AppColors.darkOnSurfaceVariant,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      ActionChip(
+                        backgroundColor: AppColors.neonGreen.withValues(alpha: 0.12),
+                        side: BorderSide(color: AppColors.neonGreen.withValues(alpha: 0.3)),
+                        label: Text(
+                          '📥 Simulate Play Store Clean App',
+                          style: TextStyle(color: AppColors.neonGreen, fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () async {
+                          await BackgroundGuardService.instance.simulateAppDownloadScan(
+                            appName: 'Spotify Music',
+                            packageName: 'com.spotify.music',
+                            isMalicious: false,
+                          );
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('✅ Simulated Play Store download: Scanned clean (Score: 0/100)!'),
+                                backgroundColor: AppColors.neonGreen,
+                              ),
+                            );
+                            setState(() {});
+                          }
+                        },
+                      ),
+                      ActionChip(
+                        backgroundColor: AppColors.danger.withValues(alpha: 0.12),
+                        side: BorderSide(color: AppColors.danger.withValues(alpha: 0.3)),
+                        label: Text(
+                          '🚨 Simulate Malicious Sideload Alert',
+                          style: TextStyle(color: AppColors.danger, fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () async {
+                          await BackgroundGuardService.instance.simulateAppDownloadScan(
+                            appName: 'FreeRecharge_Offer.apk',
+                            packageName: 'com.spynote.stealer.trojan',
+                            isMalicious: true,
+                          );
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('🚨 Simulated Trojan Sideload: High Risk Alert Triggered!'),
+                                backgroundColor: AppColors.danger,
+                              ),
+                            );
+                            setState(() {});
+                          }
+                        },
+                      ),
+                      ActionChip(
+                        backgroundColor: AppColors.warning.withValues(alpha: 0.12),
+                        side: BorderSide(color: AppColors.warning.withValues(alpha: 0.3)),
+                        label: Text(
+                          '⚠️ Simulate Vulnerable Activity',
+                          style: TextStyle(color: AppColors.warning, fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () async {
+                          await BackgroundGuardService.instance.simulateVulnerableAppActivity(
+                            appName: 'BackgroundFlashlight',
+                            vulnerabilityReason: 'Vulnerability Alert: App attempted background overlay injection and accessibility screen scraping without user consent.',
+                          );
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('⚠️ Vulnerable Activity Warning Sent!'),
+                                backgroundColor: AppColors.warning,
+                              ),
+                            );
+                            setState(() {});
+                          }
+                        },
+                      ),
+                    ],
                   ),
                 ],
               ),

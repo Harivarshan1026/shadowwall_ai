@@ -50,4 +50,36 @@ class NativeScannerService {
       _logger.e('Error securing screen', error: e);
     }
   }
+
+  /// Check if Usage Stats access is granted by user
+  static Future<bool> hasUsageStatsPermission() async {
+    try {
+      final bool? result = await _channel.invokeMethod('hasUsageStatsPermission');
+      return result ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Request user to grant Usage Stats access in Android Settings
+  static Future<void> requestUsageStatsPermission() async {
+    try {
+      await _channel.invokeMethod('requestUsageStatsPermission');
+    } catch (e) {
+      _logger.e('Error requesting usage stats permission', error: e);
+    }
+  }
+
+  /// Get the app package & name currently in the foreground
+  static Future<Map<String, String>?> getForegroundApp() async {
+    try {
+      final dynamic result = await _channel.invokeMethod('getForegroundApp');
+      if (result != null) {
+        return Map<String, String>.from(result);
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
 }

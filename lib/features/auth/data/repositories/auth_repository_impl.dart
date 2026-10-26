@@ -5,6 +5,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import '../../domain/entities/user_entity.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../../../../core/errors/failures.dart';
+import '../../../../core/config/env_config.dart';
 import 'package:flutter/foundation.dart';
 
 /// REAL FIREBASE AUTHENTICATION REPOSITORY
@@ -51,7 +52,13 @@ class AuthRepositoryImpl implements AuthRepository {
         password: password,
       );
       if (userCredential.user != null) {
-        return Right(_mapFirebaseUser(userCredential.user!));
+        final userEntity = _mapFirebaseUser(userCredential.user!);
+        await EnvConfig.saveUserSession(
+          uid: userEntity.uid,
+          email: userEntity.email,
+          displayName: userEntity.displayName,
+        );
+        return Right(userEntity);
       }
       return Left(AuthFailure(message: 'Sign in failed: User is null'));
     } on FirebaseAuthException catch (e) {
@@ -64,10 +71,35 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<Either<Failure, UserEntity>> signInWithGoogle() async {
     try {
-      // Trigger the Google Authentication flow with the Web Client ID
-      final GoogleSignInAccount? googleUser = await GoogleSignIn(
-        clientId: '883269776134-fsmbsq1tov13j3krqv7k3hobi0akf0hc.apps.googleusercontent.com',
-      ).signIn();
+      if (kIsWeb) {
+        final GoogleAuthProvider googleProvider = GoogleAuthProvider();
+        googleProvider.addScope('email');
+        googleProvider.addScope('profile');
+        final UserCredential userCredential = await _firebaseAuth.signInWithPopup(googleProvider);
+        
+        if (userCredential.user != null) {
+          final userEntity = _mapFirebaseUser(userCredential.user!);
+          await EnvConfig.saveUserSession(
+            uid: userEntity.uid,
+            email: userEntity.email,
+            displayName: userEntity.displayName,
+          );
+          return Right(userEntity);
+        }
+        return Left(AuthFailure(message: 'Google Sign-In failed: User is null'));
+      }
+
+      // Trigger the Google Authentication flow with the Web/Server Client ID for Firebase Auth
+      final GoogleSignIn googleSignIn = GoogleSignIn(
+        serverClientId: '883269776134-fsmbsq1tov13j3krqv7k3hobi0akf0hc.apps.googleusercontent.com',
+      );
+
+      // Sign out first to ensure account picker shows and prevent stale sessions
+      try {
+        await googleSignIn.signOut();
+      } catch (_) {}
+
+      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
       
       // If the user cancels the sign-in popup
       if (googleUser == null) {
@@ -87,13 +119,40 @@ class AuthRepositoryImpl implements AuthRepository {
       final UserCredential userCredential = await _firebaseAuth.signInWithCredential(credential);
       
       if (userCredential.user != null) {
-        return Right(_mapFirebaseUser(userCredential.user!));
+        final userEntity = _mapFirebaseUser(userCredential.user!);
+        await EnvConfig.saveUserSession(
+          uid: userEntity.uid,
+          email: userEntity.email,
+          displayName: userEntity.displayName,
+        );
+        return Right(userEntity);
       }
       return Left(AuthFailure(message: 'Google Sign-In failed: User is null'));
     } on FirebaseAuthException catch (e) {
       return Left(AuthFailure(message: e.message ?? 'Google Sign-In failed on Firebase.'));
     } catch (e) {
       return Left(AuthFailure(message: 'Google Sign-In Error: $e'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, UserEntity>> signInAnonymously() async {
+    try {
+      final userCredential = await _firebaseAuth.signInAnonymously();
+      if (userCredential.user != null) {
+        final userEntity = _mapFirebaseUser(userCredential.user!);
+        await EnvConfig.saveUserSession(
+          uid: userEntity.uid,
+          email: userEntity.email.isNotEmpty ? userEntity.email : 'guest@shadowwall.ai',
+          displayName: userEntity.displayName ?? 'Guest Defender',
+        );
+        return Right(userEntity);
+      }
+      return Left(AuthFailure(message: 'Guest Sign-In failed: User is null'));
+    } on FirebaseAuthException catch (e) {
+      return Left(AuthFailure(message: e.message ?? 'Guest Sign-In failed on Firebase.'));
+    } catch (e) {
+      return Left(AuthFailure(message: 'Guest Sign-In Error: $e'));
     }
   }
 
@@ -114,7 +173,13 @@ class AuthRepositoryImpl implements AuthRepository {
       
       if (userCredential.user != null) {
         await userCredential.user!.updateDisplayName(displayName);
-        return Right(_mapFirebaseUser(userCredential.user!));
+        final userEntity = _mapFirebaseUser(userCredential.user!);
+        await EnvConfig.saveUserSession(
+          uid: userEntity.uid,
+          email: userEntity.email,
+          displayName: displayName,
+        );
+        return Right(userEntity);
       }
       return Left(AuthFailure(message: 'Registration failed: User is null'));
     } on FirebaseAuthException catch (e) {
@@ -139,7 +204,21 @@ class AuthRepositoryImpl implements AuthRepository {
     try {
       final user = _firebaseAuth.currentUser;
       if (user != null) {
-        return Right(_mapFirebaseUser(user));
+        final userEntity = _mapFirebaseUser(user);
+        await EnvConfig.saveUserSession(
+          uid: userEntity.uid,
+          email: userEntity.email,
+          displayName: userEntity.displayName,
+        );
+        return Right(userEntity);
+      }
+      if (EnvConfig.isUserLoggedIn && (EnvConfig.userUid != null || EnvConfig.userEmail != null)) {
+        return Right(UserEntity(
+          uid: EnvConfig.userUid ?? 'persisted-device-user',
+          email: EnvConfig.userEmail ?? 'user@shadowwall.ai',
+          displayName: EnvConfig.userDisplayName ?? 'Cyber Defender',
+          isEmailVerified: true,
+        ));
       }
       return const Right(null);
     } catch (e) {
@@ -181,10 +260,12 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<Either<Failure, void>> signOut() async {
     try {
-      await _firebaseAuth.signOut();
-      return const Right(null);
-    } catch (e) {
-      return Left(AuthFailure(message: 'Sign out failed'));
-    }
+      await Future.wait([
+        _firebaseAuth.signOut(),
+        GoogleSignIn().signOut(),
+      ]);
+    } catch (_) {}
+    await EnvConfig.clearUserSession();
+    return const Right(null);
   }
 }

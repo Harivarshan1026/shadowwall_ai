@@ -52,7 +52,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyAvL9QKLaDRVCEcJz7g-cH3o8BCDYtYbEg',
-    appId: '1:883269776134:android:2c5e66902f2a9e9b12a487',
+    appId: '1:883269776134:android:d9ded1169663118112a487',
     messagingSenderId: '883269776134',
     projectId: 'shadowwall-ai-hari',
     storageBucket: 'shadowwall-ai-hari.firebasestorage.app',

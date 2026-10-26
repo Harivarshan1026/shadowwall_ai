@@ -1,40 +1,86 @@
-name: Build Flutter APK
+name: Build ShadowWall AI APK
 
 on:
   push:
     branches:
       - main
       - master
-  workflow_dispatch: # Allows manual trigger from GitHub UI
+  workflow_dispatch: # Manual trigger from GitHub Actions tab
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
+      # ── 1. Checkout source code ──────────────────────────────────────────
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup Java
+      # ── 2. Java 17 (required by Android Gradle) ──────────────────────────
+      - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
 
-      - name: Setup Flutter
+      # ── 3. Flutter SDK (pinned to match local dev environment) ────────────
+      - name: Setup Flutter 3.44.8
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.44.8'
           channel: 'stable'
+          cache: true
 
+      # ── 4. Keystore & Release Signing Configuration ──────────────────────
+      - name: Configure Production Signing Keystore
+        run: |
+          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "Using production upload keystore from GitHub Secrets"
+            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/upload-keystore.jks
+            printf "keyAlias=%s\nkeyPassword=%s\nstoreFile=../app/upload-keystore.jks\nstorePassword=%s\n" \
+              "${{ secrets.KEY_ALIAS }}" "${{ secrets.KEY_PASSWORD }}" "${{ secrets.KEYSTORE_PASSWORD }}" > android/key.properties
+          else
+            echo "Generating automated release upload keystore for CI"
+            keytool -genkeypair -v -keystore android/app/upload-keystore.jks -alias upload \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass "ShadowWallProd2026!" -keypass "ShadowWallProd2026!" \
+              -dname "CN=ShadowWall AI, OU=Mobile Security, O=ShadowWall, L=City, ST=State, C=US"
+            printf "keyAlias=upload\nkeyPassword=ShadowWallProd2026!\nstoreFile=../app/upload-keystore.jks\nstorePassword=ShadowWallProd2026!\n" > android/key.properties
+          fi
+          echo "✅ Release signing keystore configured"
+
+      # ── 5. Install Flutter dependencies ──────────────────────────────────
       - name: Install Dependencies
         run: flutter pub get
 
-      - name: Build APK
-        run: flutter build apk --release
+      # ── 6. Build Release APK ──────────────────────────────────────────────
+      - name: Build Release APK
+        run: |
+          flutter build apk --release \
+            --dart-define=GEMINI_API_KEY="${{ secrets.GEMINI_API_KEY }}" \
+            --dart-define=SAFE_BROWSING_API_KEY="${{ secrets.SAFE_BROWSING_API_KEY }}" \
+            --dart-define=VIRUSTOTAL_API_KEY="${{ secrets.VIRUSTOTAL_API_KEY }}"
 
+      # ── 7. Build Play Store AAB (Production Signed Bundle) ───────────────
+      - name: Build Release AAB (Play Store Bundle)
+        run: |
+          flutter build appbundle --release \
+            --dart-define=GEMINI_API_KEY="${{ secrets.GEMINI_API_KEY }}" \
+            --dart-define=SAFE_BROWSING_API_KEY="${{ secrets.SAFE_BROWSING_API_KEY }}" \
+            --dart-define=VIRUSTOTAL_API_KEY="${{ secrets.VIRUSTOTAL_API_KEY }}"
+
+      # ── 8. Upload APK as downloadable artifact (30 days) ─────────────────
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: shadowwall-ai-apk
+          name: ShadowWall-AI-Release-APK
           path: build/app/outputs/flutter-apk/app-release.apk
-          retention-days: 7
+          retention-days: 30
+
+      # ── 9. Upload AAB as downloadable artifact (30 days) ─────────────────
+      - name: Upload AAB Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ShadowWall-AI-PlayStore-AAB
+          path: build/app/outputs/bundle/release/app-release.aab
+          retention-days: 30

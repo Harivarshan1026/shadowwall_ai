@@ -1,11 +1,13 @@
 /// Auth state and providers using Riverpod.
 library;
 
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/repositories/auth_repository_impl.dart';
 import '../../domain/entities/user_entity.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../../domain/usecases/auth_usecases.dart';
+import '../../../../core/config/env_config.dart';
 
 // ──────────── Repository Provider ────────────
 
@@ -21,6 +23,10 @@ final signInWithEmailProvider = Provider((ref) {
 
 final signInWithGoogleProvider = Provider((ref) {
   return SignInWithGoogle(ref.read(authRepositoryProvider));
+});
+
+final signInAnonymouslyProvider = Provider((ref) {
+  return SignInAnonymously(ref.read(authRepositoryProvider));
 });
 
 final signUpProvider = Provider((ref) {
@@ -74,25 +80,89 @@ class AuthState {
 class AuthNotifier extends StateNotifier<AuthState> {
   final SignInWithEmail _signInWithEmail;
   final SignInWithGoogle _signInWithGoogle;
+  final SignInAnonymously _signInAnonymously;
   final SignUp _signUp;
   final ForgotPassword _forgotPassword;
   final BiometricAuth _biometricAuth;
   final AuthRepository _repository;
+  StreamSubscription<UserEntity?>? _authSubscription;
 
   AuthNotifier({
     required SignInWithEmail signInWithEmail,
     required SignInWithGoogle signInWithGoogle,
+    required SignInAnonymously signInAnonymously,
     required SignUp signUp,
     required ForgotPassword forgotPassword,
     required BiometricAuth biometricAuth,
     required AuthRepository repository,
   })  : _signInWithEmail = signInWithEmail,
         _signInWithGoogle = signInWithGoogle,
+        _signInAnonymously = signInAnonymously,
         _signUp = signUp,
         _forgotPassword = forgotPassword,
         _biometricAuth = biometricAuth,
         _repository = repository,
-        super(const AuthState());
+        super(
+          EnvConfig.isUserLoggedIn
+              ? AuthState(
+                  status: AuthStatus.authenticated,
+                  user: UserEntity(
+                    uid: EnvConfig.userUid ?? 'persisted-device-user',
+                    email: EnvConfig.userEmail ?? 'user@shadowwall.ai',
+                    displayName: EnvConfig.userDisplayName ?? 'Cyber Defender',
+                    isEmailVerified: true,
+                  ),
+                )
+              : const AuthState(status: AuthStatus.initial),
+        ) {
+    _initAuth();
+  }
+
+  void _initAuth() {
+    _authSubscription = _repository.authStateChanges.listen((user) {
+      if (user != null) {
+        EnvConfig.saveUserSession(
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName,
+        );
+        state = state.copyWith(
+          status: AuthStatus.authenticated,
+          user: user,
+        );
+      }
+    });
+
+    if (!EnvConfig.isUserLoggedIn) {
+      _checkCurrentUser();
+    }
+  }
+
+  Future<void> _checkCurrentUser() async {
+    final result = await _repository.getCurrentUser();
+    result.fold(
+      (_) {},
+      (user) {
+        if (user != null) {
+          EnvConfig.saveUserSession(
+            uid: user.uid,
+            email: user.email,
+            displayName: user.displayName,
+          );
+          state = state.copyWith(
+            status: AuthStatus.authenticated,
+            user: user,
+          );
+        }
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
+  }
 
   Future<void> signInWithEmail(String email, String password) async {
     state = state.copyWith(status: AuthStatus.loading);
@@ -115,6 +185,23 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = state.copyWith(status: AuthStatus.loading);
 
     final result = await _signInWithGoogle();
+
+    result.fold(
+      (failure) => state = state.copyWith(
+        status: AuthStatus.error,
+        errorMessage: failure.message,
+      ),
+      (user) => state = state.copyWith(
+        status: AuthStatus.authenticated,
+        user: user,
+      ),
+    );
+  }
+
+  Future<void> signInAnonymously() async {
+    state = state.copyWith(status: AuthStatus.loading);
+
+    final result = await _signInAnonymously();
 
     result.fold(
       (failure) => state = state.copyWith(
@@ -188,6 +275,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> signOut() async {
     await _repository.signOut();
+    await EnvConfig.clearUserSession();
     state = const AuthState(status: AuthStatus.unauthenticated);
   }
 
@@ -203,6 +291,7 @@ final authNotifierProvider =
   return AuthNotifier(
     signInWithEmail: ref.read(signInWithEmailProvider),
     signInWithGoogle: ref.read(signInWithGoogleProvider),
+    signInAnonymously: ref.read(signInAnonymouslyProvider),
     signUp: ref.read(signUpProvider),
     forgotPassword: ref.read(forgotPasswordProvider),
     biometricAuth: ref.read(biometricAuthProvider),

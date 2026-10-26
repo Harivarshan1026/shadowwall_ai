@@ -22,20 +22,16 @@ class QuickActionsGrid extends StatelessWidget {
           AppColors.neonGreen, RoutePaths.apkAnalyzer),
       _QuickAction('Permissions', Icons.admin_panel_settings_rounded,
           AppColors.warning, RoutePaths.permissionDoctor),
-      _QuickAction('Device Check', Icons.phone_android_rounded,
+      _QuickAction('Device Check', Icons.security_rounded,
           AppColors.info, RoutePaths.deviceSecurity),
       _QuickAction('Screenshot AI', Icons.screenshot_rounded,
           AppColors.danger, RoutePaths.screenshotAnalyzer),
-      _QuickAction('Passwords', Icons.password_rounded,
-          AppColors.primaryCyanLight, RoutePaths.passwordGuardian),
       _QuickAction('AI Assistant', Icons.smart_toy_rounded,
           AppColors.accentPurpleLight, RoutePaths.aiAssistant),
-      _QuickAction('Secret Vault', Icons.lock_rounded,
-          AppColors.danger, RoutePaths.secretLocker),
       _QuickAction('Wi-Fi Guard', Icons.wifi_lock_rounded,
           AppColors.primaryCyan, RoutePaths.wifiGuardian),
-      _QuickAction('Analytics', Icons.analytics_rounded,
-          AppColors.accentPurple, RoutePaths.threatAnalytics),
+      _QuickAction('Secret Locker', Icons.lock_rounded,
+          AppColors.warning, RoutePaths.secretLocker),
     ];
 
     return GridView.builder(

@@ -53,9 +53,10 @@ class ApkResultScreen extends StatelessWidget {
                 child: Column(
                   children: [
                     _infoRow('File Name', r['fileName'] ?? 'Unknown.apk'),
+                    _infoRow('File Size', r['fileSize'] ?? 'Inspected'),
                     _infoRow('Package ID', r['packageName'] ?? 'com.unknown.app'),
                     _infoRow('Developer', r['developer'] ?? 'Unverified / Third-Party'),
-                    _infoRow('Digital Signature', r['signature'] ?? 'Self-Signed / Debug Key'),
+                    _infoRow('SHA-256 Hash', r['sha256'] ?? (r['signature'] ?? 'Available')),
                   ],
                 ),
               ),
@@ -120,7 +121,7 @@ class ApkResultScreen extends StatelessWidget {
                       children: [
                         const Icon(Icons.smart_toy_rounded, color: AppColors.primaryCyan, size: 22),
                         const SizedBox(width: 8),
-                        Text('Option 2: Human-Like AI & Option 1: Hardware Scan', style: AppTypography.titleMedium.copyWith(color: AppColors.primaryCyan)),
+                        Text('Malware & Heuristic Threat Indicators', style: AppTypography.titleMedium.copyWith(color: AppColors.primaryCyan)),
                       ],
                     ),
                     const SizedBox(height: 12),

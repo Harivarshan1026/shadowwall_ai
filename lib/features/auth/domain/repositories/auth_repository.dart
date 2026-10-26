@@ -15,6 +15,9 @@ abstract class AuthRepository {
   /// Sign in with Google.
   Future<Either<Failure, UserEntity>> signInWithGoogle();
 
+  /// Sign in anonymously / guest access.
+  Future<Either<Failure, UserEntity>> signInAnonymously();
+
   /// Register with email and password.
   Future<Either<Failure, UserEntity>> signUp({
     required String email,

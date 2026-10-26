@@ -31,6 +31,17 @@ class SignInWithGoogle {
   }
 }
 
+/// Sign in anonymously / guest.
+class SignInAnonymously {
+  final AuthRepository repository;
+
+  SignInAnonymously(this.repository);
+
+  Future<Either<Failure, UserEntity>> call() {
+    return repository.signInAnonymously();
+  }
+}
+
 /// Sign up with email and password.
 class SignUp {
   final AuthRepository repository;

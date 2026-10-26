@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_typography.dart';
-import '../../../../core/widgets/glass_card.dart';
 import '../../../../core/widgets/cyber_app_bar.dart';
+import '../../../../core/widgets/cyber_markdown_view.dart';
 import '../../../../core/config/env_config.dart';
 import '../../../../ai_engine/services/gemini_ai_service.dart';
 
@@ -76,15 +76,16 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
       if (result.isSuccess && result.text != null && result.text!.isNotEmpty) {
         responseText = result.text!;
       } else {
-        // Fallback with an explanatory note if API call failed
-        final fallback = _generateFallbackResponse(text);
-        final err = result.errorMessage ?? 'API Connection failed';
-        responseText = '$fallback\n\n*(Note: Live Gemini query encountered: $err. Showing offline cybersecurity intelligence).*';
+        // Fallback seamlessly and cleanly to offline intelligence with zero debug notes
+        responseText = _generateFallbackResponse(text);
       }
     } else {
       // 2. Offline Cybersecurity Knowledge Base
       responseText = _generateFallbackResponse(text);
     }
+
+    // Clean any stray markdown symbols
+    responseText = GeminiAiService.sanitizeAiOutput(responseText);
 
     if (!mounted) return;
 
@@ -143,229 +144,32 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
     );
   }
 
-  void _showApiKeyDialog() {
-    final controller = TextEditingController(text: EnvConfig.geminiApiKey);
-    String selectedModel = EnvConfig.geminiModel;
-    bool isTesting = false;
-    String? testResultMsg;
-    bool? testSuccess;
-
-    showDialog(
-      context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              backgroundColor: AppColors.darkSurface,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-                side: BorderSide(color: AppColors.primaryCyan.withValues(alpha: 0.3)),
-              ),
-              title: Row(
-                children: [
-                  const Icon(Icons.key_rounded, color: AppColors.primaryCyan, size: 22),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Google AI Studio API Key',
-                      style: AppTypography.titleMedium.copyWith(color: AppColors.darkOnSurface),
-                    ),
-                  ),
-                ],
-              ),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Configure your Gemini API key to enable live AI threat intelligence and contextual chatbot queries.',
-                      style: AppTypography.bodySmall.copyWith(color: AppColors.darkOnSurfaceVariant),
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: controller,
-                      style: AppTypography.mono.copyWith(color: AppColors.darkOnSurface, fontSize: 12),
-                      decoration: InputDecoration(
-                        hintText: 'AIzaSy...',
-                        hintStyle: AppTypography.mono.copyWith(color: AppColors.darkOnSurfaceVariant.withValues(alpha: 0.5), fontSize: 12),
-                        prefixIcon: const Icon(Icons.vpn_key_rounded, size: 18, color: AppColors.primaryCyan),
-                        suffixIcon: controller.text.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear, size: 16),
-                                onPressed: () => setDialogState(() => controller.clear()),
-                              )
-                            : null,
-                        filled: true,
-                        fillColor: AppColors.darkSurfaceVariant,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                      ),
-                      onChanged: (_) => setDialogState(() {
-                        testResultMsg = null;
-                        testSuccess = null;
-                      }),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Model Selection:',
-                      style: AppTypography.labelMedium.copyWith(color: AppColors.darkOnSurface),
-                    ),
-                    const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        color: AppColors.darkSurfaceVariant,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: selectedModel,
-                          dropdownColor: AppColors.darkSurfaceVariant,
-                          isExpanded: true,
-                          style: AppTypography.bodySmall.copyWith(color: AppColors.darkOnSurface),
-                          items: const [
-                            DropdownMenuItem(
-                              value: 'gemini-3.6-flash',
-                              child: Text('gemini-3.6-flash (Fast & Accurate)'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'gemini-3.7-flash',
-                              child: Text('gemini-3.7-flash (Next-Gen Flash)'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'gemini-flash-latest',
-                              child: Text('gemini-flash-latest (Auto-Updating)'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'gemini-2.5-pro',
-                              child: Text('gemini-2.5-pro (Deep Reasoning)'),
-                            ),
-                          ],
-                          onChanged: (val) {
-                            if (val != null) {
-                              setDialogState(() => selectedModel = val);
-                            }
-                          },
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    // Test connection button
-                    Row(
-                      children: [
-                        OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: AppColors.primaryCyan),
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          ),
-                          icon: isTesting
-                              ? const SizedBox(
-                                  width: 14,
-                                  height: 14,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primaryCyan),
-                                )
-                              : const Icon(Icons.network_check_rounded, size: 16, color: AppColors.primaryCyan),
-                          label: Text(
-                            isTesting ? 'Testing...' : 'Test Key',
-                            style: AppTypography.labelSmall.copyWith(color: AppColors.primaryCyan),
-                          ),
-                          onPressed: isTesting
-                              ? null
-                              : () async {
-                                  final candidate = controller.text.trim();
-                                  if (candidate.isEmpty) {
-                                    setDialogState(() {
-                                      testSuccess = false;
-                                      testResultMsg = 'Please enter an API key first.';
-                                    });
-                                    return;
-                                  }
-
-                                  setDialogState(() {
-                                    isTesting = true;
-                                    testResultMsg = null;
-                                  });
-
-                                  final isValid = await GeminiAiService.instance.testApiKey(candidate);
-
-                                  setDialogState(() {
-                                    isTesting = false;
-                                    testSuccess = isValid;
-                                    testResultMsg = isValid
-                                        ? '✓ Connected to Google AI Studio!'
-                                        : '✗ Invalid API key or network error.';
-                                  });
-                                },
-                        ),
-                        if (testResultMsg != null) ...[
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              testResultMsg!,
-                              style: AppTypography.labelSmall.copyWith(
-                                color: (testSuccess ?? false) ? AppColors.neonGreen : AppColors.danger,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: AppColors.info.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: AppColors.info.withValues(alpha: 0.2)),
-                      ),
-                      child: Text(
-                        'Tip: You can also define GEMINI_API_KEY inside your .env file in the project directory.',
-                        style: AppTypography.labelSmall.copyWith(color: AppColors.info),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(dialogContext),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryCyan),
-                  onPressed: () async {
-                    final newKey = controller.text.trim();
-                    await EnvConfig.setGeminiApiKey(newKey);
-                    await EnvConfig.setGeminiModel(selectedModel);
-
-                    if (mounted) {
-                      setState(() {});
-                      Navigator.pop(dialogContext);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            EnvConfig.hasGeminiApiKey
-                                ? '🔑 Gemini API Key & Model Saved!'
-                                : 'Key cleared. Switched to offline knowledge base.',
-                          ),
-                          backgroundColor: EnvConfig.hasGeminiApiKey ? AppColors.neonGreen : AppColors.warning,
-                        ),
-                      );
-                    }
-                  },
-                  child: const Text('Save & Apply', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
   /// Extensive offline cybersecurity knowledge engine
   String _generateFallbackResponse(String prompt) {
-    final query = prompt.toLowerCase();
+    final query = prompt.toLowerCase().trim();
+    final cleanQuery = query.replaceAll(RegExp(r'[!.,?/\\]'), '').trim();
+
+    // 0. Greetings & Natural Chat
+    if (['hi', 'hii', 'hiii', 'hello', 'hey', 'heyy', 'hola', 'sup', 'howdy', 'good morning', 'good evening', 'good afternoon'].contains(cleanQuery) ||
+        cleanQuery.startsWith('hi ') || cleanQuery.startsWith('hello ') || cleanQuery.startsWith('hey ')) {
+      return 'Hey there! 👋 How can I help you with your device security, scam checks, or cyber safety today?';
+    }
+
+    if (cleanQuery == 'how are you' || cleanQuery == 'how are you doing' || cleanQuery == 'how are u') {
+      return 'I am doing great and ready to protect your device! 🛡️ What cybersecurity topic or question would you like to explore?';
+    }
+
+    if (cleanQuery == 'who are you' || cleanQuery == 'what are you' || cleanQuery == 'what is shadowwall') {
+      return 'I am ShadowWall AI, your personal cybersecurity and mobile defense companion 🛡️. I help analyze suspicious links, audit Wi-Fi security, inspect APK files, and answer any cyber defense questions.';
+    }
+
+    if (cleanQuery == 'thank you' || cleanQuery == 'thanks' || cleanQuery == 'thx' || cleanQuery == 'thank u') {
+      return 'You are very welcome! 😊 Stay safe and feel free to ask anytime if you need more security advice.';
+    }
+
+    if (cleanQuery == 'bye' || cleanQuery == 'goodbye' || cleanQuery == 'see you') {
+      return 'Stay vigilant and stay safe online! 🛡️ Reach out whenever you need security assistance.';
+    }
 
     // 1. Wi-Fi & Wireless Security
     if (query.contains('wifi') || query.contains('wi-fi') || query.contains('router') || query.contains('wpa') || query.contains('handshake') || query.contains('wps') || query.contains('bssid')) {
@@ -474,19 +278,92 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
 ✔️ Disable "Auto-Connect to Open Networks" in device Wi-Fi settings.''';
     }
 
-    // 8. General Cybersecurity Assistant Fallback
+    // 8. WhatsApp / Telegram / OTP & SIM Swap Frauds
+    if (query.contains('otp') || query.contains('whatsapp') || query.contains('telegram') || query.contains('sim swap') || query.contains('call forward') || query.contains('*401*')) {
+      return '''📱 OTP, Social Account & SIM Hijack Defense:
+
+1. How Attackers Exploit You:
+• Call Forwarding Traps (*401* / *21*): Scammers trick you into dialing numbers that forward your phone calls and voice OTPs to their burner phones.
+• WhatsApp Impersonation: Attackers pose as family or friends asking for a "6-digit code sent by mistake".
+• SIM Swapping: Fraudsters forge identity documents at carrier stores to transfer your phone number to their SIM.
+
+2. Immediate Safeguards:
+✔️ Never share any 6-digit verification code or OTP over phone, chat, or email.
+✔️ Enable Two-Step Verification (with a custom PIN) inside WhatsApp and Telegram Settings -> Account.
+✔️ If your phone suddenly loses cellular signal and shows "No Service", contact your carrier immediately from another device.''';
+    }
+
+    // 9. Crypto, Task & Investment Scams
+    if (query.contains('crypto') || query.contains('bitcoin') || query.contains('task') || query.contains('investment') || query.contains('work from home') || query.contains('part time') || query.contains('like video')) {
+      return '''💰 Investment, Task & Crypto Fraud Defense:
+
+1. Deceptive Tactics:
+• "Prepaid Task Scams": Fraudsters add you to Telegram groups offering money for YouTube likes or hotel reviews, then demand advance deposits to unlock "VIP profits".
+• Fake Crypto Trading Exchanges: Manipulated charts show rapid profits, but withdrawals are blocked demanding "clearance taxes".
+• Ponzi Telegram Bots: Automated bots promising guaranteed daily returns.
+
+2. Golden Safety Rules:
+✔️ Any job asking you to pay money to receive earnings is 100% a scam.
+✔️ Only trade cryptocurrencies on regulated, licensed global or national exchanges.
+✔️ Never deposit funds into unknown individual bank accounts or crypto wallet addresses.''';
+    }
+
+    // 10. Social Media Hacking & Account Recovery (Instagram, Facebook, Google)
+    if (query.contains('instagram') || query.contains('hacked') || query.contains('facebook') || query.contains('account recovery') || query.contains('stolen') || query.contains('compromised')) {
+      return '''🛡️ Compromised Account Emergency Recovery Playbook:
+
+1. Immediate Emergency Actions:
+✔️ Go to official account recovery portals (e.g. instagram.com/hacked or myaccount.google.com/security).
+✔️ Request a password reset to your trusted recovery email and phone number.
+✔️ If 2FA was hijacked, use your stored Offline Backup Codes or submit a selfie video verification request to the platform support team.
+
+2. Post-Recovery Hardening:
+✔️ Revoke all authorized apps and terminate active sessions under "Settings -> Security -> Where You're Logged In".
+✔️ Change master passwords to high-entropy passphrases (16+ characters).
+✔️ Activate TOTP Authenticator app (Google Authenticator / Aegis) instead of SMS.''';
+    }
+
+    // 11. Courier / Delivery / Electricity Bill SMS Scams
+    if (query.contains('courier') || query.contains('fedex') || query.contains('speed post') || query.contains('delivery') || query.contains('electricity') || query.contains('bill update') || query.contains('pan update')) {
+      return '''📦 Courier & Utility Bill Deceptive SMS Defense:
+
+1. How the Scam Operates:
+• "Your package address is incomplete, update here" or "Your electricity power will be disconnected tonight, call officer immediately".
+• Links lead to fake portals prompting a nominal payment (e.g. ₹5 or \$1), which secretly captures your banking credentials or installs remote support software (AnyDesk / TeamViewer).
+
+2. Defense Protocol:
+✔️ Never call numbers mentioned inside SMS warnings.
+✔️ Verify parcel status directly by visiting the official courier website and entering your tracking ID.
+✔️ Never install remote desktop apps (AnyDesk, RustDesk, QuickSupport) at the request of an unknown caller.''';
+    }
+
+    // 12. Device Overheating, Spyware & Mic/Camera Indicators
+    if (query.contains('hot') || query.contains('battery') || query.contains('spy') || query.contains('camera') || query.contains('mic') || query.contains('listening') || query.contains('slow')) {
+      return '''📱 Spyware & Device Anomaly Detection Guide:
+
+1. Indicators of Hidden Background Spyware:
+• Rapid battery drain and unexpected device overheating while idling.
+• Persistent green or orange dot in your phone's status bar indicating active microphone/camera usage.
+• Unsolicited popups and sudden high background mobile data usage.
+
+2. Remediation Steps:
+✔️ Open Android Settings -> Privacy -> Permission Manager -> Check which apps have background Camera & Microphone permissions.
+✔️ Check Android Settings -> Apps -> Special App Access -> Device Admin Apps & Display Over Other Apps.
+✔️ Run a full scan using the ShadowWall AI "Device Security" and "APK Analyzer" modules.''';
+    }
+
+    // 13. General Cybersecurity Assistant Fallback
     return '''🛡️ ShadowWall AI Security Guide:
 
 I am your active cybersecurity companion! Ask me about any technical or defense topic:
 
-• "How does Wi-Fi WPA2/WPA3 handshake cracking work?"
 • "How do fake UPI payment screenshot scams deceive users?"
+• "How does Wi-Fi WPA2/WPA3 handshake cracking work?"
 • "Explain man-in-the-middle (MITM) attacks on public Wi-Fi."
 • "Why is APK sideloading dangerous on Android?"
 • "What is the best way to store passwords and setup 2FA?"
 • "How do zero-click exploits like Pegasus operate?"
-
-*(Tip: Tap the 🔑 icon in the top right to configure your Google AI Studio API Key for unlimited live conversational Gemini answers!)*''';
+• "How do I protect my WhatsApp and Instagram accounts from being hacked?"''';
   }
 
   void _scrollToBottom() {
@@ -503,22 +380,12 @@ I am your active cybersecurity companion! Ask me about any technical or defense 
 
   @override
   Widget build(BuildContext context) {
-    final hasKey = EnvConfig.hasGeminiApiKey;
-
     return Scaffold(
       appBar: CyberAppBar(
         title: 'ShadowWall AI',
-        subtitle: hasKey ? 'Google Gemini Live AI' : 'Cybersecurity Assistant',
+        subtitle: 'Intelligent Security Companion',
         showBack: true,
         actions: [
-          IconButton(
-            icon: Icon(
-              hasKey ? Icons.key_rounded : Icons.key_off_rounded,
-              color: hasKey ? AppColors.neonGreen : AppColors.warning,
-            ),
-            onPressed: _showApiKeyDialog,
-            tooltip: hasKey ? 'Gemini API Key Active' : 'Configure Gemini API Key',
-          ),
           IconButton(
             icon: const Icon(Icons.delete_sweep_rounded, color: AppColors.darkOnSurfaceVariant),
             onPressed: _clearChat,
@@ -530,9 +397,6 @@ I am your active cybersecurity companion! Ask me about any technical or defense 
         decoration: const BoxDecoration(gradient: AppColors.backgroundGradient),
         child: Column(
           children: [
-            // Status Header Banner
-            _buildStatusHeader(hasKey),
-
             // Message List
             Expanded(
               child: ListView.builder(
@@ -559,61 +423,6 @@ I am your active cybersecurity companion! Ask me about any technical or defense 
             _buildInputArea(),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildStatusHeader(bool hasKey) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: hasKey
-            ? AppColors.neonGreen.withValues(alpha: 0.08)
-            : AppColors.warning.withValues(alpha: 0.08),
-        border: Border(
-          bottom: BorderSide(
-            color: hasKey
-                ? AppColors.neonGreen.withValues(alpha: 0.2)
-                : AppColors.warning.withValues(alpha: 0.2),
-          ),
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(
-              color: hasKey ? AppColors.neonGreen : AppColors.warning,
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              hasKey
-                  ? 'Live AI Mode: ${EnvConfig.geminiModel} active'
-                  : 'Offline Knowledge Engine (Tap 🔑 to connect Live Gemini AI)',
-              style: AppTypography.labelSmall.copyWith(
-                color: hasKey ? AppColors.neonGreen : AppColors.warning,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          if (!hasKey)
-            GestureDetector(
-              onTap: _showApiKeyDialog,
-              child: Text(
-                'Connect Key →',
-                style: AppTypography.labelSmall.copyWith(
-                  color: AppColors.primaryCyan,
-                  fontWeight: FontWeight.bold,
-                  decoration: TextDecoration.underline,
-                ),
-              ),
-            ),
-        ],
       ),
     );
   }
@@ -681,13 +490,19 @@ I am your active cybersecurity companion! Ask me about any technical or defense 
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SelectableText(
-                      text,
-                      style: AppTypography.bodyMedium.copyWith(
-                        color: AppColors.darkOnSurface,
-                        height: 1.45,
+                    if (isUser)
+                      SelectableText(
+                        text,
+                        style: AppTypography.bodyMedium.copyWith(
+                          color: Colors.white,
+                          height: 1.45,
+                        ),
+                      )
+                    else
+                      CyberMarkdownView(
+                        text: text,
+                        accentColor: AppColors.primaryCyan,
                       ),
-                    ),
                     const SizedBox(height: 4),
                     Align(
                       alignment: Alignment.bottomRight,

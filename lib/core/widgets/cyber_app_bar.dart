@@ -5,6 +5,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_typography.dart';
 
@@ -42,7 +43,14 @@ class CyberAppBar extends StatelessWidget implements PreferredSizeWidget {
           ? IconButton(
               icon: const Icon(Icons.arrow_back_ios_rounded, size: 20),
               tooltip: 'Back',
-              onPressed: onBack ?? () => Navigator.of(context).pop(),
+              onPressed: onBack ??
+                  () {
+                    if (context.canPop()) {
+                      context.pop();
+                    } else {
+                      context.go('/');
+                    }
+                  },
             )
           : leading,
       title: Column(

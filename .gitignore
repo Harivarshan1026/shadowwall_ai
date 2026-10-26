@@ -1,6 +1,13 @@
-# Environment variables
+# Environment & Secrets
 .env
 !.env.example
+
+# Keystore and release signing credentials
+key.properties
+*.jks
+*.keystore
+*.apk
+*.aab
 
 # Miscellaneous
 *.class
@@ -47,3 +54,7 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Large Gradle/Android binary files
+android/gradle/*.zip
+*.zip

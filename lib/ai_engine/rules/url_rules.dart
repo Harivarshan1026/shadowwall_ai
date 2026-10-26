@@ -10,6 +10,15 @@ class UrlRules {
 
   /// Analyze a URL and return a risk assessment map.
   static Map<String, dynamic> analyze(String url) {
+    final lowerTrimmed = url.trim().toLowerCase();
+    if (lowerTrimmed.startsWith('upi://') ||
+        lowerTrimmed.startsWith('paytmmp://') ||
+        lowerTrimmed.startsWith('phonepe://') ||
+        lowerTrimmed.startsWith('gpay://') ||
+        (lowerTrimmed.contains('upi://') && lowerTrimmed.contains('pa='))) {
+      return _analyzeUpiPayment(url.trim());
+    }
+
     double score = 0;
     final reasons = <String>[];
     final actions = <String>[];
@@ -234,4 +243,69 @@ class UrlRules {
     'tk', 'ml', 'ga', 'cf', 'gq', 'xyz', 'top', 'work',
     'click', 'link', 'buzz', 'surf', 'rest', 'icu',
   ];
+
+  /// Specialized UPI Payment QR analysis & safety validation
+  static Map<String, dynamic> _analyzeUpiPayment(String url) {
+    double score = 0;
+    final reasons = <String>[];
+    final actions = <String>[];
+    String category = 'Safe';
+
+    final uri = Uri.tryParse(url);
+    if (uri == null) {
+      return {
+        'score': 40.0,
+        'category': 'Medium Risk',
+        'reasons': ['Malformed payment QR code format'],
+        'actions': ['Do not scan or pay with unverified payment codes'],
+      };
+    }
+
+    final queryParams = uri.queryParameters;
+    final pa = queryParams['pa'] ?? '';
+    final pn = queryParams['pn'] ?? '';
+    final am = queryParams['am'];
+
+    if (pa.isEmpty) {
+      score += 45;
+      category = 'Suspicious Payment';
+      reasons.add('⚠️ Missing Payee VPA: Payment address is absent in QR');
+      actions.add('Do not proceed with this unverified payment QR code');
+    } else if (!pa.contains('@')) {
+      score += 40;
+      category = 'Suspicious Payment';
+      reasons.add('⚠️ Invalid Payee Address: VPA format ($pa) does not match UPI standards');
+      actions.add('Verify payee with the store or merchant before transferring funds');
+    } else {
+      reasons.add('✅ Valid UPI Payee VPA: $pa');
+      if (pn.isNotEmpty) {
+        reasons.add('✅ Merchant/Payee Name: $pn');
+      }
+      if (am != null && am.isNotEmpty) {
+        reasons.add('💰 Requested Amount: ₹$am');
+      }
+      actions.add('Verify that recipient "$pn" matches the expected store before authorizing');
+    }
+
+    // Check for suspicious script injection or hidden phishing redirect in note
+    final tn = queryParams['tn'] ?? '';
+    if (tn.contains('http://') || tn.contains('https://') || tn.contains('.apk')) {
+      score += 50;
+      category = 'Phishing';
+      reasons.add('🔴 Malicious link embedded inside payment note parameter');
+      actions.add('Cancel payment immediately');
+    }
+
+    if (score == 0) {
+      category = 'Safe';
+      actions.add('Safe to proceed to payment app');
+    }
+
+    return {
+      'score': score,
+      'category': category,
+      'reasons': reasons,
+      'actions': actions,
+    };
+  }
 }

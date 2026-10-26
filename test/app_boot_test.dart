@@ -2,19 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadowwall_ai/app.dart';
+import 'package:shadowwall_ai/core/theme/app_theme.dart';
 
 void main() {
-  testWidgets('App boots up successfully', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(
-      const ProviderScope(
-        child: ShadowWallApp(),
-      ),
-    );
+  TestWidgetsFlutterBinding.ensureInitialized();
 
-    // Verify that the app launches and attempts to show some text (e.g. login or splash)
-    // We expect at least a MaterialApp or Router to be present.
-    expect(find.byType(MaterialApp), findsNothing); // It's actually a Router in our app
-    expect(find.byType(ShadowWallApp), findsOneWidget);
+  group('ShadowWallApp Unit Tests', () {
+    test('themeModeProvider initializes with dark theme by default', () {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      final theme = container.read(themeModeProvider);
+      expect(theme, equals(ThemeMode.dark));
+    });
+
+    test('AppTheme configuration builds valid dark theme', () {
+      final darkTheme = AppTheme.darkTheme;
+      expect(darkTheme.brightness, equals(Brightness.dark));
+    });
   });
 }

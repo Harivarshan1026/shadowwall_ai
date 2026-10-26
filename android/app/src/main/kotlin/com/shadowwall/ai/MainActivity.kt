@@ -5,7 +5,13 @@ import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.provider.Settings
 import android.app.KeyguardManager
+import android.app.AppOpsManager
+import android.app.usage.UsageStatsManager
+import android.app.usage.UsageEvents
 import android.content.Context
+import android.content.Intent
+import android.os.Process
+import android.os.Build
 import android.view.WindowManager
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -48,9 +54,9 @@ class MainActivity : FlutterFragmentActivity() {
                             withContext(Dispatchers.Main) {
                                 result.success(info)
                             }
-                        } catch (e: Exception) {
+                        } catch (e: Throwable) {
                             withContext(Dispatchers.Main) {
-                                result.error("APK_ERROR", e.message, null)
+                                result.error("APK_ERROR", e.message ?: "Failed to inspect APK package", null)
                             }
                         }
                     }
@@ -64,8 +70,20 @@ class MainActivity : FlutterFragmentActivity() {
                     }
                 }
                 "secureScreen" -> {
-                    window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                    // Screenshots and screen recordings allowed
+                    window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
                     result.success(true)
+                }
+                "hasUsageStatsPermission" -> {
+                    result.success(hasUsageStatsPermission())
+                }
+                "requestUsageStatsPermission" -> {
+                    requestUsageStatsPermission()
+                    result.success(true)
+                }
+                "getForegroundApp" -> {
+                    val app = getForegroundApp()
+                    result.success(app)
                 }
                 else -> result.notImplemented()
             }
@@ -105,7 +123,16 @@ class MainActivity : FlutterFragmentActivity() {
         pkg.applicationInfo?.sourceDir = path
         pkg.applicationInfo?.publicSourceDir = path
         
-        val appName = pkg.applicationInfo?.loadLabel(pm)?.toString() ?: pkg.packageName
+        var appName = pkg.packageName
+        try {
+            val label = pkg.applicationInfo?.loadLabel(pm)?.toString()
+            if (!label.isNullOrBlank()) {
+                appName = label
+            }
+        } catch (_: Throwable) {
+            appName = pkg.packageName
+        }
+
         val permissions = pkg.requestedPermissions?.toList() ?: emptyList()
 
         return mapOf(
@@ -134,5 +161,67 @@ class MainActivity : FlutterFragmentActivity() {
             "usbDebugging" to adbEnabled,
             "screenLock" to isDeviceSecure
         )
+    }
+
+    private fun hasUsageStatsPermission(): Boolean {
+        val appOps = getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
+        val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            appOps.unsafeCheckOpNoThrow(
+                AppOpsManager.OPSTR_GET_USAGE_STATS,
+                Process.myUid(),
+                packageName
+            )
+        } else {
+            appOps.checkOpNoThrow(
+                AppOpsManager.OPSTR_GET_USAGE_STATS,
+                Process.myUid(),
+                packageName
+            )
+        }
+        return mode == AppOpsManager.MODE_ALLOWED
+    }
+
+    private fun requestUsageStatsPermission() {
+        val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        startActivity(intent)
+    }
+
+    private fun getForegroundApp(): Map<String, String>? {
+        if (!hasUsageStatsPermission()) return null
+
+        val usm = getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager ?: return null
+        val endTime = System.currentTimeMillis()
+        val startTime = endTime - 1000 * 15 // Last 15 seconds
+
+        val events = usm.queryEvents(startTime, endTime)
+        val event = UsageEvents.Event()
+        var lastForegroundPackage: String? = null
+        var lastEventTime: Long = 0
+
+        while (events.hasNextEvent()) {
+            events.getNextEvent(event)
+            val isResume = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                event.eventType == UsageEvents.Event.ACTIVITY_RESUMED
+            } else {
+                event.eventType == UsageEvents.Event.MOVE_TO_FOREGROUND
+            }
+            if (isResume && event.timeStamp >= lastEventTime) {
+                lastForegroundPackage = event.packageName
+                lastEventTime = event.timeStamp
+            }
+        }
+
+        if (lastForegroundPackage != null && lastForegroundPackage != packageName) {
+            val pm = packageManager
+            val appName = try {
+                val ai = pm.getApplicationInfo(lastForegroundPackage, 0)
+                pm.getApplicationLabel(ai).toString()
+            } catch (e: Exception) {
+                lastForegroundPackage
+            }
+            return mapOf("package" to lastForegroundPackage, "name" to appName)
+        }
+        return null
     }
 }

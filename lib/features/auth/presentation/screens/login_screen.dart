@@ -1,16 +1,14 @@
 /// Login screen — authentication entry point.
 ///
-/// Features email/password login, Google sign-in, biometric
-/// authentication, and navigation to register/forgot password.
+/// Features email/password login, Google sign-in,
+/// and navigation to register/forgot password.
 library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_typography.dart';
-import '../../../../core/theme/glassmorphism.dart';
 import '../../../../core/widgets/gradient_button.dart';
 import '../../../../core/widgets/glass_card.dart';
 import '../../../../core/utils/validators.dart';
@@ -59,27 +57,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       ),
     );
     _animController.forward();
-    _checkAndAutoPromptBiometrics();
-  }
-
-  Future<void> _checkAndAutoPromptBiometrics() async {
-    final prefs = await SharedPreferences.getInstance();
-    final isEnrolled = prefs.getBool('biometrics_enrolled') ?? false;
-    if (isEnrolled && mounted) {
-      await Future.delayed(const Duration(milliseconds: 500));
-      if (mounted) {
-        _handleBiometricAuth();
-      }
-    }
-  }
-
-  Future<void> _handleBiometricAuth() async {
-    await ref.read(authNotifierProvider.notifier).authenticateWithBiometrics();
-    final prefs = await SharedPreferences.getInstance();
-    final authState = ref.read(authNotifierProvider);
-    if (authState.status == AuthStatus.authenticated) {
-      await prefs.setBool('biometrics_enrolled', true);
-    }
   }
 
   @override
@@ -324,31 +301,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         ),
         const SizedBox(height: 20),
 
-        // Social Buttons
-        Row(
-          children: [
-            Expanded(
-              child: SocialLoginButton(
-                label: 'Google',
-                icon: Icons.g_mobiledata_rounded,
-                onPressed: authState.status == AuthStatus.loading
-                    ? null
-                    : () => ref
-                        .read(authNotifierProvider.notifier)
-                        .signInWithGoogle(),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: SocialLoginButton(
-                label: 'Biometric',
-                icon: Icons.fingerprint_rounded,
-                onPressed: authState.status == AuthStatus.loading
-                    ? null
-                    : _handleBiometricAuth,
-              ),
-            ),
-          ],
+        // Google Sign-In Button
+        SocialLoginButton(
+          label: 'Continue with Google',
+          icon: Icons.g_mobiledata_rounded,
+          onPressed: authState.status == AuthStatus.loading
+              ? null
+              : () => ref
+                  .read(authNotifierProvider.notifier)
+                  .signInWithGoogle(),
+        ),
+        const SizedBox(height: 12),
+
+        // Guest / Instant Access Button
+        SocialLoginButton(
+          label: 'Continue as Guest',
+          icon: Icons.person_outline_rounded,
+          onPressed: authState.status == AuthStatus.loading
+              ? null
+              : () => ref
+                  .read(authNotifierProvider.notifier)
+                  .signInAnonymously(),
         ),
       ],
     );

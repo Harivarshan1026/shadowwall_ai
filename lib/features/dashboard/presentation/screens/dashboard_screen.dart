@@ -144,7 +144,7 @@ class DashboardScreen extends ConsumerWidget {
                         healthScore: dashboardState.cyberHealthScore,
                         deviceStatus: dashboardState.deviceStatus,
                         recentScans: dashboardState.recentScans,
-                        aiReview: 'Option 1 Native Scan & Option 2 Google Gemini AI Audit Complete. Device hardware parameters and recent threat vectors have been cryptographically verified.',
+                        aiReview: 'ShadowWall Deep Native Scan & Neural Threat Audit Complete. Device hardware parameters and recent threat vectors have been cryptographically verified.',
                       );
                     },
                   ),
@@ -154,26 +154,12 @@ class DashboardScreen extends ConsumerWidget {
               // ── Recent Scans ──
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Recent Scans',
-                        style: AppTypography.headlineSmall.copyWith(
-                          color: AppColors.darkOnSurface,
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: () => context.push(RoutePaths.cyberReports),
-                        child: Text(
-                          'See All',
-                          style: AppTypography.labelMedium.copyWith(
-                            color: AppColors.primaryCyan,
-                          ),
-                        ),
-                      ),
-                    ],
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+                  child: Text(
+                    'Recent Scans',
+                    style: AppTypography.headlineSmall.copyWith(
+                      color: AppColors.darkOnSurface,
+                    ),
                   ),
                 ),
               ),

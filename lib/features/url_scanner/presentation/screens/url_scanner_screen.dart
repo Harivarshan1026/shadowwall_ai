@@ -10,7 +10,6 @@ import '../../../../core/theme/app_typography.dart';
 import '../../../../core/widgets/glass_card.dart';
 import '../../../../core/widgets/gradient_button.dart';
 import '../../../../core/widgets/cyber_app_bar.dart';
-import '../../../../core/utils/validators.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../ai_engine/services/risk_engine.dart';
 import '../../../../ai_engine/services/gemini_ai_service.dart';
@@ -96,8 +95,8 @@ class _UrlScannerScreenState extends ConsumerState<UrlScannerScreen> {
       'riskScore': blendedScore,
       'threatCategory': category,
       'confidence': (safeBrowsing != null || virusTotal != null)
-          ? 'Enterprise (Safe Browsing + VirusTotal + Gemini AI)'
-          : (aiResult != null ? 'High (Gemini AI + Technical)' : 'Medium (Technical Engine)'),
+          ? 'Enterprise Multi-Shield (Neural AI + Global Threat DB)'
+          : (aiResult != null ? 'High (ShadowWall Neural AI + Technical Analysis)' : 'Active (On-Device Heuristic Engine)'),
       'reasons': reasons.toSet().toList(),
       'recommendedActions': actions.toSet().toList(),
     };

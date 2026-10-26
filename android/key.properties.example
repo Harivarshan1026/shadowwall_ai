@@ -1,0 +1,8 @@
+# Keystore configuration for Google Play release signing
+# Place your release keystore (.jks or .keystore) inside android/app/ (or anywhere inside android/)
+# NEVER commit key.properties or *.jks to version control (git)!
+
+keyAlias=upload
+keyPassword=YOUR_KEY_PASSWORD
+storeFile=../app/upload-keystore.jks
+storePassword=YOUR_STORE_PASSWORD

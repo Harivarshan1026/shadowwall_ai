@@ -2,12 +2,14 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/widgets/glass_card.dart';
 import '../../../../core/widgets/animated_score_ring.dart';
 import '../../../../core/widgets/threat_badge.dart';
 import '../../../../core/widgets/cyber_app_bar.dart';
+import '../../../../core/widgets/gradient_button.dart';
 
 class QrResultScreen extends StatelessWidget {
   final Map<String, dynamic>? scanResult;
@@ -110,6 +112,46 @@ class QrResultScreen extends StatelessWidget {
                   ],
                 ),
               ),
+              const SizedBox(height: 24),
+              if (isPaymentQr)
+                GradientButton(
+                  label: 'Proceed with Payment App (GPay / PhonePe / Paytm)',
+                  icon: Icons.payments_rounded,
+                  gradient: const LinearGradient(
+                    colors: [AppColors.neonGreen, AppColors.primaryCyan],
+                  ),
+                  onPressed: () async {
+                    final uri = Uri.tryParse(content);
+                    if (uri != null) {
+                      try {
+                        final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        if (!launched) {
+                          await launchUrl(uri, mode: LaunchMode.externalNonBrowserApplication);
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Could not launch payment app: $e'),
+                              backgroundColor: AppColors.warning,
+                            ),
+                          );
+                        }
+                      }
+                    }
+                  },
+                )
+              else if (content.startsWith('http://') || content.startsWith('https://'))
+                GradientButton(
+                  label: 'Open URL in Browser',
+                  icon: Icons.open_in_browser_rounded,
+                  onPressed: () async {
+                    final uri = Uri.tryParse(content);
+                    if (uri != null) {
+                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                    }
+                  },
+                ),
               const SizedBox(height: 32),
             ],
           ),
