@@ -1,5 +1,7 @@
 <div align="center">
 
+
+
   <img src="assets/images/feature_graphic_1024x500.png" alt="ShadowWall AI Banner" width="100%" style="border-radius: 12px; max-width: 900px;" />
 
   <br/><br/>
